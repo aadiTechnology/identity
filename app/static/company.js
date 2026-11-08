@@ -5,7 +5,7 @@ const err = document.getElementById('err')
 async function call(path, body) {
   const r = await fetch(`/company/api/${tid}${path}`, { method: body === undefined ? 'GET' : 'POST', headers: { 'content-type': 'application/json', 'x-csrf-token': csrf }, body: body === undefined ? undefined : JSON.stringify(body) })
   const d = await r.json().catch(() => ({}))
-  if (!r.ok) { err.hidden = false; err.textContent = d.detail || 'Something went wrong'; throw new Error(d.detail) }
+  if (!r.ok) { const msg = Array.isArray(d.detail) ? 'Please check the email address and name.' : (d.detail || 'Something went wrong'); err.hidden = false; err.textContent = msg; throw new Error(msg) }
   err.hidden = true
   return d
 }
