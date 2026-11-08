@@ -1,0 +1,19 @@
+WEBVTT
+
+00:00:00.000 --> 00:00:29.704
+Sprint five is about running Identity safely. The platform administrator page now has a Health panel. It shows that the database answers, how many people, companies and live sign ins there are, how many change messages are waiting to reach products and how many have failed, and how old the signing key is. A failed count above zero is the signal to act. An outside monitor can also watch the ready address, which checks the database and the signing key.
+
+00:00:30.159 --> 00:01:07.247
+Next, the limits. Anyone can open the forgot password page, so it needed protection. A single person can request three reset mails in ten minutes. Further requests look exactly the same on screen but send nothing, so nobody learns which addresses exist, and nobody can flood a mailbox. And one address cannot spray requests across many accounts: after ten, the page asks the visitor to wait. The same kind of limit now protects the one time link page and the token endpoint that products call, where guessing client secrets is slowed down.
+
+00:01:07.698 --> 00:01:30.029
+Now a drill the runbook describes: rotating the key that signs every token. The administrator presses Rotate signing key and confirms. A new key starts signing at once. The old key stays published until the tokens it signed have expired, so nobody is signed out. The panel now shows a fresh key and two published keys.
+
+00:01:30.490 --> 00:01:51.456
+The proof is a normal sign in. Meera Nair signs in to Project Tracker through Aadi. Her token is signed by the new key, which Project Tracker has never seen. It notices the unknown key, fetches the updated list from Identity, and lets her in. No restart and no change on the Project Tracker side.
+
+00:01:51.916 --> 00:02:31.068
+Behind the screens: the forty one Identity tests now pass on the same database the live system uses, PostgreSQL, not only on a test database. The upgrade from the previous version was rehearsed with data in place. A load run with thirty people signing in at once managed ninety eight requests a second with no errors on one small process. A backup was restored into a scratch database and every table matched. A scan of the libraries found known weaknesses in two of them in Identity and two in Project Tracker. All four were upgraded, and Project Tracker passes its tests with the new versions.
+
+00:02:31.523 --> 00:03:03.237
+Three documents now sit in the repository: a production runbook, a security review, and a guide for putting the next product on Identity. The review is honest about what is not done. Administrators have no second sign in step yet, the limits and the delivery worker assume a single process, and there has been no outside penetration test. Backups work, but the nightly schedule and an off server copy still need your decision. Next is connecting Documents, using the guide.
