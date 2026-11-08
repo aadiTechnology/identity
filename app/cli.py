@@ -112,6 +112,24 @@ def seed_demo(_):
     print("Demo data ready. Sign in as asha@demo.example.com (two companies), rahul@... (one product), meera@... (one product), nobody@... (none). Password:", DEMO_PASSWORD)
 
 
+def _register_tracker(url: str):
+    """Registers Project Tracker as a product and its sign-in client. No people, companies or subscriptions are created."""
+    with SessionLocal() as db:
+        db.merge(m.Product(key="tracker", name="Project Tracker", description="Projects, timesheets and profitability",
+                           initiate_url=f"{url}/api/auth/sso/start", active=True))
+        db.merge(m.OAuthClient(client_id="tracker-web", product_key="tracker", name="Project Tracker", redirect_uris=[f"{url}/api/auth/sso/callback"],
+                               post_logout_redirect_uris=[f"{url}/"], active=True))
+        db.commit()
+
+
+def bootstrap(_):
+    """Runs at every start: registers Project Tracker when TRACKER_URL is set. Idempotent, safe in production."""
+    url = os.environ.get("TRACKER_URL", "").rstrip("/")
+    if url:
+        _register_tracker(url)
+        print("Project Tracker registered for", url)
+
+
 def _seed_tracker_demo():
     """When TRACKER_URL is set, point the Project Tracker product at the real demo Project Tracker and add its demo people."""
     url = os.environ.get("TRACKER_URL", "").rstrip("/")
@@ -119,12 +137,8 @@ def _seed_tracker_demo():
         return
     from .demo_people import DOMAIN, PEOPLE, TENANT_NAME, TENANT_SLUG
 
+    _register_tracker(url)
     with SessionLocal() as db:
-        db.merge(m.Product(key="tracker", name="Project Tracker", description="Projects, timesheets and profitability",
-                           initiate_url=f"{url}/api/auth/sso/start", active=True))
-        db.merge(m.OAuthClient(client_id="tracker-web", product_key="tracker", name="Project Tracker", redirect_uris=[f"{url}/api/auth/sso/callback"],
-                               post_logout_redirect_uris=[f"{url}/"], active=True))
-        db.commit()
         t = db.execute(select(m.Tenant).where(m.Tenant.slug == TENANT_SLUG)).scalar_one_or_none() or m.Tenant(name=TENANT_NAME, slug=TENANT_SLUG)
         db.add(t)
         db.flush()
@@ -183,6 +197,8 @@ def main():
     x.add_argument("--product", default="tracker")
     x.add_argument("--dry-run", action="store_true")
     x.set_defaults(f=import_tracker_cmd)
+    x = sp.add_parser("bootstrap")
+    x.set_defaults(f=bootstrap)
     x = sp.add_parser("seed-demo")
     x.set_defaults(f=seed_demo)
     x = sp.add_parser("init-db")
