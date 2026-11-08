@@ -1,6 +1,4 @@
 """Browser-facing pages: sign in, product hub, password reset, sign out."""
-import time
-from collections import defaultdict, deque
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, Form, Request
@@ -8,23 +6,19 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import mail, models as m, service
+from .. import mail, models as m, ratelimit, service
 from ..config import get_settings
 from ..db import get_db
 from ..security import burn_time, check_password_strength, hash_password, hash_token, new_token, verify_password
 from ..web import SESSION_COOKIE, cookie_args, csrf_ok, render, safe_next
 
 router = APIRouter()
-_hits: dict[str, deque] = defaultdict(deque)
+def _ip(request: Request) -> str:
+    return request.client.host if request.client else "?"
 
 
 def _rate_limited(ip: str) -> bool:
-    cfg = get_settings()
-    q, now = _hits[ip], time.monotonic()
-    while q and now - q[0] > 60:
-        q.popleft()
-    q.append(now)
-    return len(q) > cfg.login_rate_per_minute
+    return ratelimit.hit(f"login:{ip}", get_settings().login_rate_per_minute)
 
 
 def current(request: Request, db: Session):
@@ -35,6 +29,19 @@ def current(request: Request, db: Session):
 def health(db: Session = Depends(get_db)):
     db.execute(select(1))
     return {"status": "ok"}
+
+
+@router.get("/health/ready")
+def ready(db: Session = Depends(get_db)):
+    """Ready = the database answers and there is a signing key. (Delivery health is on the admin status page.)"""
+    from fastapi.responses import JSONResponse
+
+    try:
+        db.execute(select(1))
+        key = db.execute(select(m.SigningKey).where(m.SigningKey.active.is_(True))).scalars().first()
+    except Exception:
+        return JSONResponse({"status": "database unavailable"}, 503)
+    return {"status": "ready"} if key else JSONResponse({"status": "no signing key"}, 503)
 
 
 @router.get("/")
@@ -129,8 +136,11 @@ def forgot_page(request: Request):
 def forgot(request: Request, email: str = Form(""), csrf: str = Form(""), db: Session = Depends(get_db)):
     if not csrf_ok(request, csrf):
         return render(request, "forgot.html", status=400)
+    if ratelimit.hit(f"forgot:{_ip(request)}", 10):
+        return render(request, "message.html", {"title": "Too many requests", "text": "Please wait a minute and try again."}, 429)
+    quiet = ratelimit.hit(f"forgot-email:{email.strip().lower()}", 3, 600)  # a fourth request in ten minutes sends nothing, but answers the same
     u = db.execute(select(m.User).where(m.User.email == email.strip().lower())).scalar_one_or_none()
-    if u and u.status in ("active", "invited"):
+    if u and u.status in ("active", "invited") and not quiet:
         tok, h = new_token()
         db.add(m.AuthToken(user_id=u.id, purpose="reset", token_hash=h, expires_at=m.now() + timedelta(hours=1)))
         db.commit()
@@ -155,6 +165,8 @@ def reset_page(request: Request, token: str = "", db: Session = Depends(get_db))
 def reset(request: Request, token: str = Form(""), password: str = Form(""), csrf: str = Form(""), db: Session = Depends(get_db)):
     if not csrf_ok(request, csrf):
         return render(request, "message.html", {"title": "Page expired", "text": "Please open the link again."}, 400)
+    if ratelimit.hit(f"reset:{_ip(request)}", 10):
+        return render(request, "message.html", {"title": "Too many requests", "text": "Please wait a minute and try again."}, 429)
     t = _valid_token(db, token)
     if not t:
         return render(request, "message.html", {"title": "Link expired", "text": "This link has already been used or has expired.", "link": "/forgot", "link_text": "Request a new link"}, 400)

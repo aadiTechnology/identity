@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import models as m, security, service
+from .. import models as m, ratelimit, security, service
 from ..config import get_settings
 from ..db import get_db
 from ..security import hash_token, new_token, pkce_ok
@@ -132,8 +132,13 @@ def _still_eligible(db, user: m.User, tenant_id: str, product_key: str) -> bool:
 def token(request: Request, grant_type: str = Form(""), code: str = Form(""), redirect_uri: str = Form(""), code_verifier: str = Form(""),
           refresh_token: str = Form(""), client_id: str = Form(""), client_secret: str = Form(""),
           authorization: str | None = Header(default=None), db: Session = Depends(get_db)):
+    ip = request.client.host if request.client else "?"
+    if ratelimit.hit(f"token:{ip}", get_settings().token_rate_per_minute):
+        return _oauth_error("slow_down", "Too many requests", 429)
     c = _client_auth(db, request, client_id, client_secret, authorization)
     if not c:
+        if ratelimit.hit(f"token-bad-client:{ip}", 20):  # someone is guessing client secrets
+            return _oauth_error("slow_down", "Too many failed attempts", 429)
         return _oauth_error("invalid_client", status=401)
     if grant_type == "authorization_code":
         ac = db.get(m.AuthCode, hash_token(code))

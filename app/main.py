@@ -22,6 +22,9 @@ def migrate():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    bad = get_settings().problems()
+    if bad:
+        raise RuntimeError("Unsafe production configuration: " + "; ".join(bad))
     with SessionLocal() as db:
         ensure_signing_key(db)
     if get_settings().webhooks_enabled:

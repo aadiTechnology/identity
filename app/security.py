@@ -102,22 +102,30 @@ def rotate_signing_key(db: Session) -> m.SigningKey:
     return nk
 
 
-def jwks(db: Session) -> dict:
-    ensure_signing_key(db)
-    keys = []
-    for k in db.execute(select(m.SigningKey).where(m.SigningKey.published.is_(True))).scalars():
-        pub = serialization.load_pem_private_key(k.private_pem.encode(), None).public_key()
+_parsed: dict[str, tuple] = {}  # kid -> (private key, public key, jwk). Keys never change once created, so this is safe to keep.
+
+
+def _key_material(k: m.SigningKey) -> tuple:
+    got = _parsed.get(k.kid)
+    if got is None:
+        priv = serialization.load_pem_private_key(k.private_pem.encode(), None)
+        pub = priv.public_key()
         jwk = jwt.algorithms.RSAAlgorithm.to_jwk(pub, as_dict=True)
         jwk.update({"kid": k.kid, "use": "sig", "alg": "RS256"})
-        keys.append(jwk)
-    return {"keys": keys}
+        got = _parsed[k.kid] = (priv, pub, jwk)
+    return got
+
+
+def jwks(db: Session) -> dict:
+    ensure_signing_key(db)
+    return {"keys": [_key_material(k)[2] for k in db.execute(select(m.SigningKey).where(m.SigningKey.published.is_(True))).scalars()]}
 
 
 def sign(db: Session, claims: dict, minutes: int) -> str:
     k = ensure_signing_key(db)
     now = datetime.now(tz=__import__("datetime").timezone.utc)
     body = {**claims, "iss": get_settings().issuer, "iat": now, "exp": now + timedelta(minutes=minutes)}
-    return jwt.encode(body, k.private_pem, algorithm="RS256", headers={"kid": k.kid})
+    return jwt.encode(body, _key_material(k)[0], algorithm="RS256", headers={"kid": k.kid})
 
 
 def verify(db: Session, token: str, audience: str | None = None) -> dict:
@@ -125,6 +133,6 @@ def verify(db: Session, token: str, audience: str | None = None) -> dict:
     k = db.get(m.SigningKey, kid)
     if not k or not k.published:
         raise jwt.InvalidTokenError("unknown key")
-    pub = serialization.load_pem_private_key(k.private_pem.encode(), None).public_key()
+    pub = _key_material(k)[1]
     return jwt.decode(token, pub, algorithms=["RS256"], issuer=get_settings().issuer, audience=audience,
                       options={"verify_aud": audience is not None})

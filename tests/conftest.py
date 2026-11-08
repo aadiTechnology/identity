@@ -1,6 +1,6 @@
 import os
 
-os.environ.update({"DATABASE_URL": "sqlite://", "COOKIE_SECURE": "false", "APP_ENV": "test", "ISSUER": "http://testserver",
+os.environ.update({"DATABASE_URL": os.environ.get("TEST_DATABASE_URL", "sqlite://"), "COOKIE_SECURE": "false", "APP_ENV": "test", "ISSUER": "http://testserver",
                    "EMAIL_BACKEND": "file", "LOGIN_RATE_PER_MINUTE": "1000", "WEBHOOKS_ENABLED": "false"})
 
 import base64
@@ -18,6 +18,13 @@ from app.main import app
 from app.security import ensure_signing_key, hash_password, hash_token
 
 PW = "Correct-Horse-9"
+
+
+@pytest.fixture(autouse=True)
+def _fresh_limits():
+    from app import ratelimit
+    ratelimit.reset()
+    yield
 
 
 @pytest.fixture()
@@ -39,6 +46,7 @@ def make_world(db):
     """Two products, three people: solo (one product), multi (two companies, two products), none (no subscription)."""
     for key, name in [("tracker", "Project Tracker"), ("dms", "Documents")]:
         db.add(m.Product(key=key, name=name, description=name + " description", initiate_url=f"https://{key}.example.com/login"))
+    db.flush()  # PostgreSQL enforces the product -> client foreign key
     db.add(m.OAuthClient(client_id="tracker-web", product_key="tracker", name="Tracker", redirect_uris=["https://tracker.example.com/cb"],
                          post_logout_redirect_uris=["https://tracker.example.com/"]))
     db.add(m.OAuthClient(client_id="dms-web", product_key="dms", name="DMS", redirect_uris=["https://dms.example.com/cb"],

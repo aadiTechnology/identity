@@ -170,6 +170,14 @@ def _seed_tracker_demo():
     print("Project Tracker demo wired to", url)
 
 
+def rotate_key(_):
+    from .security import rotate_signing_key
+
+    with SessionLocal() as db:
+        k = rotate_signing_key(db)
+    print("New signing key", k.kid, "(older keys stay published until their tokens expire)")
+
+
 def init_db(_):
     Base.metadata.create_all(engine)
     with SessionLocal() as db:
@@ -203,6 +211,8 @@ def main():
     x.add_argument("--product", default="tracker")
     x.add_argument("--dry-run", action="store_true")
     x.set_defaults(f=import_tracker_cmd)
+    x = sp.add_parser("rotate-key")
+    x.set_defaults(f=rotate_key)
     x = sp.add_parser("bootstrap")
     x.set_defaults(f=bootstrap)
     x = sp.add_parser("seed-demo")

@@ -172,3 +172,37 @@ def rotate(actor: m.User = Depends(admin_user), db: Session = Depends(get_db)):
     service.audit(db, "key.rotated", actor.id, kid=k.kid)
     db.commit()
     return {"kid": k.kid}
+
+
+@router.get("/admin/api/ops")
+def ops_status(_: m.User = Depends(admin_user), db: Session = Depends(get_db)):
+    """Is Identity healthy, and are products receiving their events?"""
+    from sqlalchemy import func
+
+    now = m.now()
+    pending = db.execute(select(m.Outbox).where(m.Outbox.delivered_at.is_(None), m.Outbox.failed.is_(False)).order_by(m.Outbox.created_at)).scalars().all()
+    failed = db.execute(select(func.count()).select_from(m.Outbox).where(m.Outbox.failed.is_(True))).scalar()
+    last = db.execute(select(func.max(m.Outbox.delivered_at))).scalar()
+    keys = db.execute(select(m.SigningKey).order_by(m.SigningKey.created_at.desc())).scalars().all()
+    active = next((k for k in keys if k.active), None)
+    return {
+        "database": "ok",
+        "events": {"pending": len(pending), "failed": failed,
+                   "oldest_pending_seconds": int((now - m.aware(pending[0].created_at)).total_seconds()) if pending else 0,
+                   "last_delivered": last.isoformat() if last else None},
+        "signing_key": {"kid": active.kid if active else None, "age_days": (now - m.aware(active.created_at)).days if active else None,
+                        "published": len([k for k in keys if k.published])},
+        "products": [{"key": p.key, "webhook": bool(p.webhook_url)} for p in db.execute(select(m.Product)).scalars()],
+        "counts": {"users": db.execute(select(func.count()).select_from(m.User)).scalar(), "companies": db.execute(select(func.count()).select_from(m.Tenant)).scalar(),
+                   "live_sessions": db.execute(select(func.count()).select_from(m.LoginSession).where(m.LoginSession.revoked.is_(False), m.LoginSession.expires_at > now)).scalar()},
+    }
+
+
+@router.post("/admin/api/maintenance/prune")
+def run_prune(actor: m.User = Depends(admin_user), db: Session = Depends(get_db)):
+    from ..maintenance import prune
+
+    out = prune(db)
+    service.audit(db, "maintenance.prune", actor.id, **out)
+    db.commit()
+    return out

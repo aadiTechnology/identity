@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     lock_after_failures: int = 5
     lock_minutes: int = 15
     login_rate_per_minute: int = 30
+    token_rate_per_minute: int = 600  # per calling address; products call from their servers, so this is generous
     webhooks_enabled: bool = True  # background delivery of change events to products
     # email: file (writes to var/outbox) or smtp
     email_backend: str = "file"
@@ -34,6 +35,21 @@ class Settings(BaseSettings):
     @property
     def is_prod(self) -> bool:
         return self.app_env == "production"
+
+    def problems(self) -> list[str]:
+        """Unsafe settings for a production start. An empty list means the configuration is acceptable."""
+        out: list[str] = []
+        if not self.is_prod:
+            return out
+        if not self.issuer.startswith("https://"):
+            out.append("ISSUER must be an https address")
+        if not self.cookie_secure:
+            out.append("COOKIE_SECURE must be true")
+        if "change-me" in self.database_url or "identity:identity@" in self.database_url or self.database_url.startswith("sqlite"):
+            out.append("DATABASE_URL still has the development default")
+        if self.email_backend == "file":
+            out.append("EMAIL_BACKEND is file: invitations and reset links would not be sent")
+        return out
 
 
 @lru_cache

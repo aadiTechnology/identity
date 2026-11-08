@@ -103,10 +103,15 @@ _stop = threading.Event()
 
 def start_worker(session_factory, interval: float = 5.0) -> threading.Thread:
     def loop():
+        last_prune = 0.0
         while not _stop.wait(interval):
             try:
                 with session_factory() as db:
                     deliver_pending(db)
+                    if time.time() - last_prune > 86400:  # housekeeping once a day
+                        from .maintenance import prune
+                        prune(db)
+                        last_prune = time.time()
             except Exception:  # never let the worker die
                 pass
     t = threading.Thread(target=loop, name="event-worker", daemon=True)
