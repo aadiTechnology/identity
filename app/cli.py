@@ -108,7 +108,46 @@ def seed_demo(_):
                 if not db.execute(select(m.TenantMember).where(m.TenantMember.tenant_id == tenants[s_].id, m.TenantMember.user_id == u.id)).scalar_one_or_none():
                     db.add(m.TenantMember(tenant_id=tenants[s_].id, user_id=u.id))
         db.commit()
+    _seed_tracker_demo()
     print("Demo data ready. Sign in as asha@demo.example.com (two companies), rahul@... (one product), meera@... (one product), nobody@... (none). Password:", DEMO_PASSWORD)
+
+
+def _seed_tracker_demo():
+    """When TRACKER_URL is set, point the Project Tracker product at the real demo Project Tracker and add its demo people."""
+    url = os.environ.get("TRACKER_URL", "").rstrip("/")
+    if not url:
+        return
+    from .demo_people import DOMAIN, PEOPLE, TENANT_NAME, TENANT_SLUG
+
+    with SessionLocal() as db:
+        db.merge(m.Product(key="tracker", name="Project Tracker", description="Projects, timesheets and profitability",
+                           initiate_url=f"{url}/api/auth/sso/start", active=True))
+        db.merge(m.OAuthClient(client_id="tracker-web", product_key="tracker", name="Project Tracker", redirect_uris=[f"{url}/api/auth/sso/callback"],
+                               post_logout_redirect_uris=[f"{url}/"], active=True))
+        db.commit()
+        t = db.execute(select(m.Tenant).where(m.Tenant.slug == TENANT_SLUG)).scalar_one_or_none() or m.Tenant(name=TENANT_NAME, slug=TENANT_SLUG)
+        db.add(t)
+        db.flush()
+        if not db.execute(select(m.Subscription).where(m.Subscription.tenant_id == t.id, m.Subscription.product_key == "tracker")).scalar_one_or_none():
+            db.add(m.Subscription(tenant_id=t.id, product_key="tracker"))
+        for key, name in PEOPLE:
+            email = f"{key}@{DOMAIN}"
+            u = db.execute(select(m.User).where(m.User.email == email)).scalar_one_or_none()
+            if not u:
+                u = m.User(email=email, name=name, password_hash=hash_password(DEMO_PASSWORD))
+                db.add(u)
+                db.flush()
+            if not db.execute(select(m.TenantMember).where(m.TenantMember.tenant_id == t.id, m.TenantMember.user_id == u.id)).scalar_one_or_none():
+                db.add(m.TenantMember(tenant_id=t.id, user_id=u.id))
+        # one person who has an Aadi account but no Project Tracker user (shows the refusal)
+        v = db.execute(select(m.User).where(m.User.email == f"visitor@{DOMAIN}")).scalar_one_or_none()
+        if not v:
+            v = m.User(email=f"visitor@{DOMAIN}", name="Vera Visitor", password_hash=hash_password(DEMO_PASSWORD))
+            db.add(v)
+            db.flush()
+            db.add(m.TenantMember(tenant_id=t.id, user_id=v.id))
+        db.commit()
+    print("Project Tracker demo wired to", url)
 
 
 def init_db(_):

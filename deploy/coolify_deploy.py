@@ -66,6 +66,8 @@ def runtime_env() -> dict:
     out = {k: env[k] for k in keep if env.get(k)}
     out["APP_ENV"] = env.get("APP_ENV", "production")
     out["APP_SEED_DEMO"] = env.get("APP_SEED_DEMO", "false")
+    if env.get("TRACKER_URL"):
+        out["TRACKER_URL"] = env["TRACKER_URL"]
     return out
 
 
