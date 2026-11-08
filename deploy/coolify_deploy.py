@@ -11,7 +11,8 @@ import urllib.request
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent
-ENV_FILE = HERE / ".env.coolify"
+DEMO = "--demo" in sys.argv  # a separate resource, database and address with fictional data
+ENV_FILE = HERE / (".env.coolify.demo" if DEMO else ".env.coolify")
 
 
 def read_env(p: Path) -> dict:
@@ -32,11 +33,15 @@ if "--from-env" in sys.argv:
         if k in src and not env.get(k):
             env[k] = src[k]
 env.setdefault("POSTGRES_PASSWORD", secrets.token_urlsafe(24))
-env.setdefault("ISSUER", "https://id.aadiprojecttracker.aaditechnology.com")
+env.setdefault("ISSUER", "https://id-demo.aadiprojecttracker.aaditechnology.com" if DEMO else "https://id.aadiprojecttracker.aaditechnology.com")
+if DEMO:
+    env.update({"APP_ENV": "demo", "APP_SEED_DEMO": "true", "EMAIL_BACKEND": "file"})  # demo never sends real e-mail
+    for k in [k for k in env if k.startswith("SMTP_")]:
+        del env[k]
 ENV_FILE.write_text("\n".join(f"{k}={v}" for k, v in env.items()) + "\n", encoding="utf8")
 
 BASE = env["COOLIFY_URL"].rstrip("/") + "/api/v1"
-NAME = "aadi-identity"
+NAME = "aadi-identity-demo" if DEMO else "aadi-identity"
 REPO, BRANCH, COMPOSE = "aadiTechnology/identity", "main", "/docker-compose.coolify.yml"
 DOMAIN = env["ISSUER"]
 
@@ -70,7 +75,7 @@ def main(deploy=True):
     st, projects = call("GET", "/projects")
     project = projects[0]["uuid"]
     st, apps = call("GET", "/applications")
-    existing = next((a for a in apps if a.get("name", "").startswith(NAME)), None)
+    existing = next((a for a in apps if a.get("name", "") == NAME), None)
     domains = [{"name": "app", "domain": DOMAIN}]
     if existing:
         uuid = existing["uuid"]
