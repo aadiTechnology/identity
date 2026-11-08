@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Choose a product{% endblock %}
+{% block body %}
+<h1>Where to, {{ user.name.split(' ')[0] }}?</h1>
+<p class="muted">Pick a product and company. You can switch any time from the product header.</p>
+{% for tname, items in groups %}
+<h2>{{ tname }}</h2>
+<ul class="list">
+{% for p in items %}<li><a class="item" href="{{ p.url }}"><strong>{{ p.product_name }}</strong><small>{{ p.description }}</small></a></li>{% endfor %}
+</ul>
+{% endfor %}
+<div class="foot"><span class="muted">{{ user.email }}</span><form method="post" action="/logout" style="margin:0"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" style="margin:0;padding:0;background:none;color:var(--brand);width:auto;font-weight:400">Sign out</button></form></div>
+{% endblock %}

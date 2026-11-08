@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Platform admin{% endblock %}
+{% block body %}
+<style>main{max-width:900px}.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)}
+.chip{display:inline-block;padding:1px 9px;border-radius:99px;border:1px solid var(--line);font-size:12px;margin:2px 4px 2px 0;background:none;color:var(--fg);width:auto;margin-top:2px;font-weight:400;cursor:pointer}
+.chip.on{background:var(--brand);color:#fff;border-color:var(--brand)}.mini{font-size:12px;color:var(--muted)}
+form.new{display:grid;gap:6px;margin-top:10px}form.new button{width:auto}</style>
+<h1>Platform admin</h1>
+<p class="muted">Companies, subscriptions and sign-ins across all Aadi products. Click a product to toggle that company's subscription.</p>
+<div id="stats" class="mini"></div>
+<div id="tenants"></div>
+<h2>Add a company</h2>
+<form class="new" id="newform">
+<label for="tn">Company name</label><input id="tn" type="text" required>
+<label for="oe">Owner email</label><input id="oe" type="email" required>
+<label for="on">Owner name</label><input id="on" type="text" required>
+<div id="prodpick"></div>
+<button type="submit">Create and invite owner</button>
+</form>
+<h2>Recent activity</h2><div id="audit" class="mini"></div>
+<div class="foot"><span class="muted">{{ user.email }}</span><a href="/">Back to my products</a></div>
+<script src="/static/admin.js" defer></script>
+{% endblock %}

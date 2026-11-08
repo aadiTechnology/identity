@@ -1,0 +1,12 @@
+# Local development: PostgreSQL on localhost:15440
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: identity
+      POSTGRES_PASSWORD: identity
+      POSTGRES_DB: identity
+    ports: ["15440:5432"]
+    volumes: [identity_pgdata:/var/lib/postgresql/data]
+volumes:
+  identity_pgdata:

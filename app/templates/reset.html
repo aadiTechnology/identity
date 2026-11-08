@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Set your password' if purpose == 'invite' else 'Choose a new password' }}{% endblock %}
+{% block body %}
+<h1>{{ 'Set your password' if purpose == 'invite' else 'Choose a new password' }}</h1>
+{% if error %}<div class="err" role="alert">{{ error }}</div>{% endif %}
+<form method="post" action="/reset"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="token" value="{{ token }}">
+<label for="password">New password</label><input id="password" name="password" type="password" autocomplete="new-password" required autofocus>
+<p class="muted" style="margin-top:6px;font-size:13px">At least 10 characters with upper and lower case letters and a number.</p>
+<button type="submit">Save password</button></form>
+{% endblock %}
