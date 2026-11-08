@@ -1,0 +1,23 @@
+1
+00:00:00,001 --> 00:00:22,166
+Sprint three connects Project Tracker to Aadi Identity. This is Project Tracker with the new setting switched to both. The sign in page now offers Continue with Aadi sign in above the familiar form. Nothing was taken away: the old password form is still here, so the change can be rolled out company by company and switched back at any time.
+
+2
+00:00:22,626 --> 00:00:43,102
+We choose Continue with Aadi sign in. The browser goes to Identity, where Priya Rao enters her email and password once. Her password is imported from Project Tracker, so nobody had to reset anything. Identity checks her, and sends her back to Project Tracker with the company already chosen.
+
+3
+00:00:43,555 --> 00:01:08,995
+This is the same Project Tracker as before. Priya is the C E O, so she sees projects, budgets, contract values and margins across the whole organization. Identity only said who she is and which company she is in. Her role and what she may see still come from Project Tracker itself. The header has a new Switch product link for people who have more than one Aadi product.
+
+4
+00:01:09,451 --> 00:01:33,302
+Now Meera Nair, a software engineer. She signs out, which also ends her Identity session, so Identity asks for her password again. Same button, same flow. But Project Tracker gives her the employee view: no project list, no budgets, no money. The sign in is shared, the permissions are not.
+
+5
+00:01:33,762 --> 00:01:54,388
+Vera Visitor has an Aadi account and belongs to the company, but nobody added her to Project Tracker. She signs in successfully at Identity, and Project Tracker politely refuses: it has no matching user for her. A person is never given a role automatically. An administrator has to add her first.
+
+6
+00:01:54,849 --> 00:02:25,938
+The setting has three values. Local is the default and changes nothing. Both shows the Aadi button next to the old form, for a pilot. Platform allows Aadi sign in only and switches the password endpoints off. Sessions that start from Aadi last sixty minutes instead of eight hours, so a removed person loses access sooner. Next is Sprint four: events from Identity, so that suspending someone takes effect in Project Tracker immediately.

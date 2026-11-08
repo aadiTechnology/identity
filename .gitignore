@@ -15,3 +15,5 @@ videos/*.log
 local_server.log
 var_demo.db
 deploy*.log
+e2e_*.log
+var_e2e.db
