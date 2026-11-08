@@ -1,11 +1,11 @@
 /**
- * Sprint 3: Project Tracker signs in through Aadi Identity. Recorded locally (Identity on :8801, Project Tracker on :8000, AUTH_MODE=both),
- * because the live Project Tracker has not been given this change. Run with DEMO_PASSWORD=<Project Tracker demo password>.
+ * Sprint 3: Project Tracker signs in through Aadi Identity. Recorded on the live demo: Project Tracker (AUTH_MODE=both) and the demo Identity.
+ * Run with DEMO_PASSWORD=<Identity demo password>. TRACKER_URL overrides the Project Tracker address (default: the live demo).
  */
 import { click, password } from './common.mjs'
 import { recordVideo } from './lib.mjs'
 
-const PT = process.env.TRACKER_URL ?? 'http://localhost:8000'
+const PT = process.env.TRACKER_URL ?? 'https://aadiprojecttracker.aaditechnology.com'
 
 const aadiSignIn = async (page, email) => {
   await click(page.getByTestId('sso-signin'))
@@ -26,7 +26,7 @@ const scenes = [
     actions: 'Open the Project Tracker sign-in page.', expected: 'Aadi button above the old form.',
     run: async (page) => { await page.goto(PT + '/', { waitUntil: 'domcontentloaded' }); await page.getByTestId('sso-signin').waitFor(); await page.waitForTimeout(2500) } },
   { chapter: 'Chapter 2 - Signing in', title: 'One sign-in, back in the product',
-    narration: 'We choose Continue with Aadi sign in. The browser goes to Identity, where Priya Rao enters her email and password once. Her password is imported from Project Tracker, so nobody had to reset anything. Identity checks her, and sends her back to Project Tracker with the company already chosen.',
+    narration: 'We choose Continue with Aadi sign in. The browser goes to Identity, where Priya Rao enters her email and password once. Her Aadi account uses the same email as her Project Tracker user, which is how the two are matched. Identity checks her, and sends her back to Project Tracker with the company already chosen.',
     actions: 'Sign in with Aadi as Priya Rao.', expected: 'Lands on the Overview Dashboard.',
     run: async (page) => { await aadiSignIn(page, 'priya.rao@aadi.demo.test'); await dashboard(page); await page.waitForTimeout(6000) } },
   { chapter: 'Chapter 2 - Signing in', title: 'Everything is still there',
