@@ -9,3 +9,9 @@ var/
 .pytest_cache/
 *.db
 videos/*.webm
+videos/.work/
+videos/verification/
+videos/*.log
+local_server.log
+var_demo.db
+deploy*.log

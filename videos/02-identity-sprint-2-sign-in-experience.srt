@@ -1,0 +1,27 @@
+1
+00:00:00,001 --> 00:00:30,070
+Sprint two is the sign in experience. The rule is simple. If a person has exactly one product, they never see a chooser. We sign in as Rahul Deshmukh, whose company, Greenline Foods, subscribes only to Project Tracker. The moment he signs in he is inside Project Tracker. This page stands in for the real product. It shows what the product received: the person, the company, and a signed token it can verify.
+
+2
+00:00:30,536 --> 00:00:43,718
+Meera Iyer works at Frostway Dairy, which bought only Documents. She goes straight into Documents. The same sign in serves both people, and each one sees only what their company has bought.
+
+3
+00:00:44,174 --> 00:01:04,700
+Asha Rao belongs to two companies. Greenline Foods has Project Tracker. Sunrise Logistics has CRM, Documents and Project Tracker. Because she has more than one choice, she sees the chooser, with her products grouped by company. This is the only time the chooser appears.
+
+4
+00:01:05,163 --> 00:01:15,715
+She chooses CRM at Sunrise Logistics. Identity sends her to the product with the company already selected, so the product knows which company she means.
+
+5
+00:01:16,177 --> 00:01:34,039
+Every product has a Switch menu in its header, fed by Identity. Asha opens it and picks Project Tracker at Greenline Foods. There is no second password prompt, because she is already signed in. The product receives a fresh token for the other company.
+
+6
+00:01:34,490 --> 00:01:50,767
+Neha Kapoor is signed up, but her company has no active subscription. She is not sent anywhere. She sees a plain explanation and is told to ask her company administrator. The same applies when a subscription expires or is cancelled.
+
+7
+00:01:51,222 --> 00:02:13,532
+Signing out from a product ends the Identity session and returns to a registered address only, so nobody can use the sign out link to send a person to a lookalike site. Behind the scenes the standard sign in uses a one time code that is tied to a secret only the product holds. A copied code is worthless, and reusing one cancels everything it created.
