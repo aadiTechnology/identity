@@ -76,8 +76,15 @@ def seed_demo(_):
     with SessionLocal() as db:
         for key, name, desc in [("tracker", "Project Tracker", "Projects, timesheets and profitability"), ("dms", "Documents", "Versioned files and approvals"),
                                 ("crm", "CRM", "Leads, deals and follow-ups"), ("social", "Aadi Social", "Brand kit and social publishing")]:
-            db.merge(m.Product(key=key, name=name, description=desc, initiate_url=f"https://{key}.example.com/login", active=True))
+            iss = get_settings().issuer
+            db.merge(m.Product(key=key, name=name, description=desc, initiate_url=f"{iss}/demo/{key}/login", active=True))
+            cid = f"demo-{key}"
+            db.merge(m.OAuthClient(client_id=cid, product_key=key, name=name + " (demo)", redirect_uris=[f"{iss}/demo/{key}/callback"],
+                                   post_logout_redirect_uris=[f"{iss}/demo/{key}/signed-out"], active=True))
         db.commit()
+        if not db.execute(select(m.User).where(m.User.email == "admin@demo.example.com")).scalar_one_or_none():
+            db.add(m.User(email="admin@demo.example.com", name="Platform Admin", password_hash=hash_password(DEMO_PASSWORD), is_platform_admin=True))
+            db.commit()
         tenants = {}
         for name, subs in [("Sunrise Logistics", ["tracker", "dms", "crm"]), ("Greenline Foods", ["tracker"]), ("Frostway Dairy", ["dms"])]:
             slug = name.lower().replace(" ", "-")

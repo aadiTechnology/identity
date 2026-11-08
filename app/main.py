@@ -44,3 +44,7 @@ app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")
 app.include_router(ui.router)
 app.include_router(oidc.router)
 app.include_router(admin.router)
+if not get_settings().is_prod:
+    from .routes import demo
+
+    app.include_router(demo.router)

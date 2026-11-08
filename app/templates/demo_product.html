@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{{ product.name }}{% endblock %}
+{% block body %}
+<style>main{max-width:560px}pre{background:var(--hover);padding:10px;border-radius:7px;overflow:auto;font-size:12px}
+.bar{display:flex;justify-content:space-between;gap:10px;align-items:center;margin:-6px 0 14px;flex-wrap:wrap}
+details{border:1px solid var(--line);border-radius:8px;padding:8px 12px}summary{cursor:pointer;font-weight:600}
+details a{display:block;padding:6px 0;color:var(--fg);text-decoration:none;border-top:1px solid var(--line);margin-top:6px}
+.tag{display:inline-block;font-size:12px;border:1px solid var(--line);border-radius:99px;padding:1px 9px;margin-right:4px}</style>
+<div class="bar"><span class="tag">Demo of {{ product.name }}</span>
+<details><summary>{{ claims.tenant_slug }} ▾ Switch</summary>
+{% for p in pairs %}<a href="{{ p.url }}">{{ p.product_name }} · {{ p.tenant_name }}</a>{% endfor %}
+<a href="/">All products</a></details></div>
+<h1>Welcome to {{ product.name }}</h1>
+<p class="muted">{{ user.name }} ({{ user.email }}) is signed in to <strong>{{ claims.tenant_slug }}</strong>. This page stands in for the real product: it started the standard sign-in, checked the signed token and now trusts it. Your role and permissions would come from the product itself.</p>
+<h2>What the product received</h2>
+<pre>{{ raw }}</pre>
+<form method="get" action="/logout"><input type="hidden" name="client_id" value="demo-{{ key }}"><input type="hidden" name="post_logout_redirect_uri" value="{{ claims.iss }}/demo/{{ key }}/signed-out">
+<button type="submit">Sign out of all products</button></form>
+{% endblock %}

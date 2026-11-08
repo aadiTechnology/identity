@@ -6,7 +6,8 @@ services:
       dockerfile: Dockerfile
     environment:
       - SERVICE_FQDN_APP_8000
-      - APP_ENV=production
+      - APP_ENV=${APP_ENV:-production}
+      - APP_SEED_DEMO=${APP_SEED_DEMO:-false}
       - ISSUER=${ISSUER:-https://id.aadiprojecttracker.aaditechnology.com}
       - COOKIE_SECURE=true
       - DATABASE_URL=postgresql+psycopg://identity:${POSTGRES_PASSWORD}@postgres:5432/identity
