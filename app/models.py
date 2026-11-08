@@ -68,6 +68,8 @@ class Product(Base):
     description: Mapped[str] = mapped_column(String(200), default="")
     initiate_url: Mapped[str] = mapped_column(String(400), default="")  # product URL that starts sign-in
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    webhook_url: Mapped[str] = mapped_column(String(400), default="")  # where change events are delivered (empty = none)
+    webhook_secret: Mapped[str] = mapped_column(String(100), default="")  # signs events and authorises the product's snapshot reads
 
 
 class Subscription(Base):
@@ -172,3 +174,19 @@ class AuditLog(Base):
     tenant_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     action: Mapped[str] = mapped_column(String(60))
     detail: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class Outbox(Base):
+    """One row per event per product. A background worker delivers it, signed, and retries with back-off."""
+    __tablename__ = "outbox"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    event_id: Mapped[str] = mapped_column(String(36), index=True)  # same for every product that receives the event
+    product_key: Mapped[str] = mapped_column(String(30), index=True)
+    type: Mapped[str] = mapped_column(String(40))
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    next_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failed: Mapped[bool] = mapped_column(Boolean, default=False)  # gave up after the last retry
+    last_error: Mapped[str] = mapped_column(String(300), default="")

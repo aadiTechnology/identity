@@ -7,7 +7,8 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
 from .db import SessionLocal, engine
-from .routes import admin, oidc, ui
+from . import events
+from .routes import admin, company, oidc, sync, ui
 from .security import ensure_signing_key
 
 
@@ -23,7 +24,10 @@ def migrate():
 async def lifespan(app: FastAPI):
     with SessionLocal() as db:
         ensure_signing_key(db)
+    if get_settings().webhooks_enabled:
+        events.start_worker(SessionLocal)
     yield
+    events.stop_worker()
 
 
 app = FastAPI(title="Aadi Identity", docs_url=None if get_settings().is_prod else "/docs", redoc_url=None, lifespan=lifespan)
@@ -44,6 +48,8 @@ app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")
 app.include_router(ui.router)
 app.include_router(oidc.router)
 app.include_router(admin.router)
+app.include_router(company.router)
+app.include_router(sync.router)
 if not get_settings().is_prod:
     from .routes import demo
 

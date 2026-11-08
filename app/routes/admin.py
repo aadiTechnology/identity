@@ -8,7 +8,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import mail, models as m, security, service
+from .. import events, mail, models as m, security, service
 from ..config import get_settings
 from ..db import get_db
 from ..security import new_token
@@ -81,9 +81,12 @@ def create_tenant(b: NewTenant, actor: m.User = Depends(admin_user), db: Session
         db.add(u)
         db.flush()
         invite(db, u)
-    db.add(m.TenantMember(tenant_id=t.id, user_id=u.id, is_admin=True))
+    mem = m.TenantMember(tenant_id=t.id, user_id=u.id, is_admin=True)
+    db.add(mem)
     for k in b.products:
         db.add(m.Subscription(tenant_id=t.id, product_key=k))
+    db.flush()
+    events.emit(db, "membership.added", tenant=t, user=u, member=mem)
     service.audit(db, "tenant.created", actor.id, t.id, name=t.name, products=b.products)
     db.commit()
     db.refresh(t)
@@ -108,6 +111,8 @@ def set_subscription(tid: str, b: SubChange, actor: m.User = Depends(admin_user)
         s = m.Subscription(tenant_id=tid, product_key=b.product)
         db.add(s)
     s.status, s.valid_until = b.status, b.valid_until
+    db.flush()
+    events.emit(db, "subscription.changed", tenant=t, subscription=s, only_product=b.product)
     service.audit(db, "subscription.changed", actor.id, tid, product=b.product, status=b.status)
     db.commit()
     db.refresh(t)
@@ -124,6 +129,7 @@ def set_tenant_status(tid: str, b: TenantStatus, actor: m.User = Depends(admin_u
     if not t or b.status not in ("active", "trial", "suspended"):
         raise HTTPException(404, "Not found")
     t.status = b.status
+    events.emit(db, "tenant.status_changed", tenant=t)
     service.audit(db, "tenant.status", actor.id, tid, status=b.status)
     db.commit()
     return _tenant_dict(t)
@@ -135,9 +141,29 @@ def revoke(uid: str, actor: m.User = Depends(admin_user), db: Session = Depends(
     if not u:
         raise HTTPException(404, "Not found")
     service.revoke_user_everywhere(db, u)
+    events.emit(db, "user.revoked", user=u)
     service.audit(db, "user.revoked", actor.id, user=uid)
     db.commit()
     return {"ok": True}
+
+
+class UserStatus(BaseModel):
+    status: str  # active | suspended
+
+
+@router.post("/admin/api/users/{uid}/status")
+def set_user_status(uid: str, b: UserStatus, actor: m.User = Depends(admin_user), db: Session = Depends(get_db)):
+    """Suspend or reactivate a person everywhere. Suspending signs them out of every product."""
+    u = db.get(m.User, uid)
+    if not u or b.status not in ("active", "suspended") or u.id == actor.id:
+        raise HTTPException(404 if not u else 422, "Not allowed")
+    u.status = b.status
+    if b.status == "suspended":
+        service.revoke_user_everywhere(db, u)
+    events.emit(db, "user.suspended" if b.status == "suspended" else "user.reactivated", user=u)
+    service.audit(db, "user.status", actor.id, user=uid, status=b.status)
+    db.commit()
+    return {"id": u.id, "status": u.status}
 
 
 @router.post("/admin/api/keys/rotate")

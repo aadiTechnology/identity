@@ -115,8 +115,11 @@ def seed_demo(_):
 def _register_tracker(url: str):
     """Registers Project Tracker as a product and its sign-in client. No people, companies or subscriptions are created."""
     with SessionLocal() as db:
+        existing = db.get(m.Product, "tracker")
+        secret = os.environ.get("TRACKER_WEBHOOK_SECRET") or (existing.webhook_secret if existing else "")
         db.merge(m.Product(key="tracker", name="Project Tracker", description="Projects, timesheets and profitability",
-                           initiate_url=f"{url}/api/auth/sso/start", active=True))
+                           initiate_url=f"{url}/api/auth/sso/start", active=True,
+                           webhook_url=f"{url}/api/auth/identity-events" if secret else "", webhook_secret=secret))
         db.merge(m.OAuthClient(client_id="tracker-web", product_key="tracker", name="Project Tracker", redirect_uris=[f"{url}/api/auth/sso/callback"],
                                post_logout_redirect_uris=[f"{url}/"], active=True))
         db.commit()
@@ -151,8 +154,11 @@ def _seed_tracker_demo():
                 u = m.User(email=email, name=name, password_hash=hash_password(DEMO_PASSWORD))
                 db.add(u)
                 db.flush()
-            if not db.execute(select(m.TenantMember).where(m.TenantMember.tenant_id == t.id, m.TenantMember.user_id == u.id)).scalar_one_or_none():
-                db.add(m.TenantMember(tenant_id=t.id, user_id=u.id))
+            mem = db.execute(select(m.TenantMember).where(m.TenantMember.tenant_id == t.id, m.TenantMember.user_id == u.id)).scalar_one_or_none()
+            if not mem:
+                db.add(m.TenantMember(tenant_id=t.id, user_id=u.id, is_admin=key == "priya.rao"))  # the CEO administers the company's people
+            elif key == "priya.rao":
+                mem.is_admin = True
         # one person who has an Aadi account but no Project Tracker user (shows the refusal)
         v = db.execute(select(m.User).where(m.User.email == f"visitor@{DOMAIN}")).scalar_one_or_none()
         if not v:

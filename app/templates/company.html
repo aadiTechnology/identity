@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}People{% endblock %}
+{% block body %}
+<style>main{max-width:860px}.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)}
+.who{min-width:0;overflow-wrap:anywhere}.mini{font-size:12px;color:var(--muted)}
+.tag{display:inline-block;padding:1px 9px;border-radius:99px;border:1px solid var(--line);font-size:12px;margin-left:4px}
+.acts button{display:inline-block;width:auto;margin:2px 0 0 4px;padding:3px 10px;font-size:12px;background:none;color:var(--fg);border:1px solid var(--line);font-weight:400}
+form.new{display:grid;gap:6px;margin-top:10px}form.new button{width:auto}
+#err{margin-top:10px}</style>
+<h1>People</h1>
+<p class="muted">Invite, suspend or remove people in your company. Products hear about the change within seconds.</p>
+{% if tenants|length > 1 %}<label for="tsel">Company</label>
+<select id="tsel" style="width:100%;padding:8px">{% for t in tenants %}<option value="{{ t.id }}" {{ 'selected' if t.id == tenant.id }}>{{ t.name }}</option>{% endfor %}</select>
+{% else %}<h2>{{ tenant.name }}</h2>{% endif %}
+<div class="mini" id="subs"></div>
+<div id="err" class="err" role="alert" hidden></div>
+<div id="members" aria-live="polite"></div>
+<h2>Invite someone</h2>
+<form class="new" id="inviteform">
+<label for="ie">Email</label><input id="ie" type="email" required>
+<label for="in">Name</label><input id="in" type="text" required>
+<button type="submit">Send invitation</button>
+</form>
+<div class="foot"><span class="muted">{{ user.email }}</span><a href="/">Back to my products</a></div>
+<input type="hidden" id="tid" value="{{ tenant.id }}">
+<input type="hidden" id="me" value="{{ user.id }}">
+<script src="/static/company.js" defer></script>
+{% endblock %}

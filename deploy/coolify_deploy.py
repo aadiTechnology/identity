@@ -68,6 +68,8 @@ def runtime_env() -> dict:
     out["APP_SEED_DEMO"] = env.get("APP_SEED_DEMO", "false")
     if env.get("TRACKER_URL"):
         out["TRACKER_URL"] = env["TRACKER_URL"]
+    if env.get("TRACKER_WEBHOOK_SECRET"):
+        out["TRACKER_WEBHOOK_SECRET"] = env["TRACKER_WEBHOOK_SECRET"]
     return out
 
 

@@ -1,7 +1,7 @@
 import os
 
 os.environ.update({"DATABASE_URL": "sqlite://", "COOKIE_SECURE": "false", "APP_ENV": "test", "ISSUER": "http://testserver",
-                   "EMAIL_BACKEND": "file", "LOGIN_RATE_PER_MINUTE": "1000"})
+                   "EMAIL_BACKEND": "file", "LOGIN_RATE_PER_MINUTE": "1000", "WEBHOOKS_ENABLED": "false"})
 
 import base64
 import hashlib

@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     lock_after_failures: int = 5
     lock_minutes: int = 15
     login_rate_per_minute: int = 30
+    webhooks_enabled: bool = True  # background delivery of change events to products
     # email: file (writes to var/outbox) or smtp
     email_backend: str = "file"
     smtp_host: str = ""

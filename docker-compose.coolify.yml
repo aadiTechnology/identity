@@ -9,6 +9,7 @@ services:
       - APP_ENV=${APP_ENV:-production}
       - APP_SEED_DEMO=${APP_SEED_DEMO:-false}
       - TRACKER_URL=${TRACKER_URL:-}
+      - TRACKER_WEBHOOK_SECRET=${TRACKER_WEBHOOK_SECRET:-}
       - ISSUER=${ISSUER:-https://id.aadiprojecttracker.aaditechnology.com}
       - COOKIE_SECURE=true
       - DATABASE_URL=postgresql+psycopg://identity:${POSTGRES_PASSWORD}@postgres:5432/identity
