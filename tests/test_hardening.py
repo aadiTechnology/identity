@@ -110,11 +110,12 @@ def test_key_rotation_keeps_old_tokens_valid_and_signs_new_ones_with_the_new_key
     assert t.status_code == 200 and jwt.get_unverified_header(t.json()["access_token"])["kid"] == new.kid
 
 
-def test_platform_administrator_without_a_company_lands_on_the_admin_page(client, db):
+def test_platform_administrator_without_a_company_gets_an_admin_hub_with_sign_out(client, db):
     prepare(db)
     login(client, "root@example.com")  # belongs to no company
     r = client.get("/")
-    assert r.status_code == 303 and r.headers["location"] == "/admin"
+    assert r.status_code == 200 and "Open the admin console" in r.text and "Sign out" in r.text
+    assert 'action="/logout"' in client.get("/admin").text and 'action="/logout"' in client.get("/company").text  # always a way out
     client.cookies.clear()
     login(client, "none@example.com")  # an ordinary person without a subscription still gets the explanation
     assert "No active subscription" in client.get("/").text

@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Administration{% endblock %}
+{% block body %}
+<h1>Hello, {{ user.name.split(' ')[0] }}</h1>
+<p class="muted">You are signed in as a platform administrator ({{ user.email }}). Administrators do not belong to a company, so there is no product to open from here.</p>
+<a class="btn" href="/admin">Open the admin console</a>
+<form method="post" action="/logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" style="background:none;color:var(--brand);border:1px solid var(--line)">Sign out</button></form>
+<p class="muted" style="margin-top:14px;font-size:13px">To try the person's view, sign out and sign in as a person from a company.</p>
+{% endblock %}

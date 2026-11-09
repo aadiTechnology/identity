@@ -21,6 +21,7 @@ form.new{display:grid;gap:6px;margin-top:10px}form.new button{width:auto}
 <label for="in">Name</label><input id="in" type="text" required>
 <button type="submit">Send invitation</button>
 </form>
+<form method="post" action="/logout" style="margin:10px 0 0"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" style="width:auto;margin:0;padding:6px 14px;background:none;color:var(--brand);border:1px solid var(--line)">Sign out</button></form>
 <div class="foot"><span class="muted">{{ user.email }}</span><a href="/">Back to my products</a></div>
 <input type="hidden" id="tid" value="{{ tenant.id }}">
 <input type="hidden" id="me" value="{{ user.id }}">

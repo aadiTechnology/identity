@@ -54,8 +54,8 @@ def hub(request: Request, db: Session = Depends(get_db)):
     pairs = service.eligible_pairs(db, user)
     step = service.next_step(pairs)
     if step == "none":
-        if user.is_platform_admin:  # administrators belong to no company: send them to the admin page, not an error
-            return RedirectResponse("/admin", 303)
+        if user.is_platform_admin:  # administrators belong to no company: offer the admin console and sign out, not an error
+            return render(request, "admin_hub.html", {"user": user})
         return render(request, "no_access.html", {"user": user})
     if step == "direct":
         return RedirectResponse(service.product_entry_url(pairs[0]), 303)
