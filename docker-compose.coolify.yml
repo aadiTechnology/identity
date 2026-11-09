@@ -53,7 +53,8 @@ services:
 volumes:
   identity_pgdata:
 networks:
-  # Shared internal network for the Aadi database server. This stack creates it with a fixed name so other stacks can join it as external.
+  # Shared internal network for the Aadi database server. Production keeps the default name aadi-data and creates it; other stacks join it as external.
+  # The demo stack sets AADI_DATA_NETWORK=aadi-data-demo so it never shares the production network.
   aadi-data:
-    name: aadi-data
+    name: ${AADI_DATA_NETWORK:-aadi-data}
     driver: bridge
