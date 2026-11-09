@@ -108,3 +108,13 @@ def test_key_rotation_keeps_old_tokens_valid_and_signs_new_ones_with_the_new_key
     code = get_code(client.get("/authorize", params=authorize_params(challenge=ch)))
     t = client.post("/token", data={"grant_type": "authorization_code", "code": code, "redirect_uri": "https://tracker.example.com/cb", "code_verifier": v, "client_id": "tracker-web"})
     assert t.status_code == 200 and jwt.get_unverified_header(t.json()["access_token"])["kid"] == new.kid
+
+
+def test_platform_administrator_without_a_company_lands_on_the_admin_page(client, db):
+    prepare(db)
+    login(client, "root@example.com")  # belongs to no company
+    r = client.get("/")
+    assert r.status_code == 303 and r.headers["location"] == "/admin"
+    client.cookies.clear()
+    login(client, "none@example.com")  # an ordinary person without a subscription still gets the explanation
+    assert "No active subscription" in client.get("/").text

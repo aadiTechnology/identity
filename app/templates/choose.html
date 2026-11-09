@@ -9,5 +9,6 @@
 {% for p in items %}<li><a class="item" href="{{ p.url }}"><strong>{{ p.product_name }}</strong><small>{{ p.description }}</small></a></li>{% endfor %}
 </ul>
 {% endfor %}
+{% if user.is_platform_admin %}<p style="margin-top:14px"><a href="/admin">Platform admin</a></p>{% endif %}
 <div class="foot"><span class="muted">{{ user.email }}</span><form method="post" action="/logout" style="margin:0"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" style="margin:0;padding:0;background:none;color:var(--brand);width:auto;font-weight:400">Sign out</button></form></div>
 {% endblock %}
