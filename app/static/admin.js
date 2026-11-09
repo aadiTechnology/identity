@@ -1,7 +1,7 @@
 const csrf=document.cookie.split('; ').find(c=>c.startsWith('id_csrf='))?.split('=')[1]||'';
 const api=(p,b)=>fetch('/admin/api'+p,{method:b?'POST':'GET',headers:{'content-type':'application/json','x-csrf-token':csrf},body:b?JSON.stringify(b):undefined}).then(r=>r.json());
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-let D;const picked=new Set();
+let D;const picked=new Set();let armedToggle=null;
 async function load(){D=await api('/overview');
  document.getElementById('stats').textContent=D.tenants.length+' companies · '+D.users+' people · '+D.products.length+' products';
  document.getElementById('tenants').innerHTML=D.tenants.map(t=>`<div class="row"><div><b>${esc(t.name)}</b> <span class="mini">${t.members} people · ${t.status}</span></div><div>${D.products.map(p=>{const s=t.subscriptions.find(x=>x.product===p.key);const on=s&&(s.status==='active'||s.status==='trial');return `<button class="chip ${on?'on':''}" data-t="${t.id}" data-p="${p.key}" data-on="${on?1:0}" aria-pressed="${!!on}">${esc(p.name)}</button>`}).join('')}</div></div>`).join('');
@@ -11,6 +11,10 @@ async function load(){D=await api('/overview');
  document.getElementById('audit').innerHTML=D.audit.map(a=>`<div>${new Date(a.at).toLocaleString()} · ${esc(a.action)}</div>`).join('')||'Nothing yet.';}
 document.addEventListener('click',async e=>{const b=e.target.closest('.chip');if(!b)return;
  if(b.classList.contains('pick')){picked.has(b.dataset.k)?picked.delete(b.dataset.k):picked.add(b.dataset.k);return load()}
+ // a subscription change reaches products within seconds (turning one off closes the company there), so it needs a second click
+ const key=b.dataset.t+':'+b.dataset.p
+ if(armedToggle!==key){armedToggle=key;const was=b.textContent;b.textContent=(b.dataset.on==='1'?'Turn off? ':'Turn on? ')+'Click again';setTimeout(()=>{if(armedToggle===key){armedToggle=null;b.textContent=was}},5000);return}
+ armedToggle=null
  await api('/tenants/'+b.dataset.t+'/subscriptions',{product:b.dataset.p,status:b.dataset.on==='1'?'cancelled':'active'});load()});
 document.getElementById('newform').addEventListener('submit',async e=>{e.preventDefault();
  const r=await api('/tenants',{name:tn.value,owner_email:oe.value,owner_name:on.value,products:[...picked]});
