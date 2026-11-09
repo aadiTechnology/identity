@@ -1,3 +1,5 @@
+# The postgres service also joins the external network aadi-data (alias aadi-postgres) so Academic and the Video Engine can reach their own
+# databases on this server. Not published on any host port. Identity's own database stays closed to those roles (see docs).
 # Coolify "Docker Compose" resource. Set the domain of the app service to https://id.aadiprojecttracker.aaditechnology.com (port 8000).
 services:
   app:
@@ -38,6 +40,11 @@ services:
       - POSTGRES_DB=identity
     volumes:
       - identity_pgdata:/var/lib/postgresql/data
+    networks:
+      default: {}
+      aadi-data:
+        aliases:
+          - aadi-postgres
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U identity -d identity"]
       interval: 5s
@@ -45,3 +52,7 @@ services:
       retries: 20
 volumes:
   identity_pgdata:
+networks:
+  # Shared internal network for the Aadi database server. Create once on the Coolify host: docker network create aadi-data
+  aadi-data:
+    external: true
