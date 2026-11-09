@@ -21,3 +21,27 @@ let armed=false
 document.getElementById('rotate').addEventListener('click',async e=>{const b=e.currentTarget,msg=document.getElementById('rotmsg')
  if(!armed){armed=true;b.textContent='Click again to confirm';msg.textContent='Old keys stay valid until their tokens expire.';setTimeout(()=>{armed=false;b.textContent='Rotate signing key';msg.textContent=''},6000);return}
  armed=false;const r=await api('/keys/rotate',{});b.textContent='Rotate signing key';msg.textContent='New key '+r.kid;load()})
+
+const impOut = () => document.getElementById('imp-out')
+const chosen = () => [...document.querySelectorAll('#imp-companies input:checked')].map(x => x.value)
+function showCompanies(list) { document.getElementById('imp-companies').innerHTML = list.map(c => `<label style="display:flex;gap:8px;align-items:center;margin:3px 0"><input type="checkbox" value="${esc(c.slug)}"> ${esc(c.name)} <span class="mini">${c.people} people</span></label>`).join('') || '<span class="mini">No companies found.</span>' }
+async function runImport(dry) {
+  const out = impOut(); out.textContent = 'Working…'
+  const sel = chosen()
+  if (!dry && !sel.length) { out.textContent = 'Tick at least one company first.'; return }
+  if (dry && !sel.length && document.querySelector('#imp-companies input')) { out.textContent = 'Tick at least one company to preview.'; return }
+  const r = await api('/import/tracker', { dry_run: dry, companies: sel })
+  if (r.detail) { out.textContent = typeof r.detail === 'string' ? r.detail : 'Could not import.'; return }
+  if (!document.querySelector('#imp-companies input')) showCompanies(r.companies)
+  if (!sel.length) { out.textContent = 'Companies listed. Tick the ones to bring across.'; return }
+  out.innerHTML = (dry ? '<b>Preview, nothing written.</b> ' : '<b>Imported.</b> ') + `${r.users_created} new people, ${r.users_updated} already here · ${r.tenants_created} new companies, ${r.tenants_updated} already here · ${r.members_created} memberships added` + (r.skipped.length ? ` · ${r.skipped.length} skipped` : '')
+  if (!dry) load()
+}
+document.getElementById('imp-list').addEventListener('click', () => { document.getElementById('imp-companies').innerHTML = ''; runImport(true) })
+document.getElementById('imp-preview').addEventListener('click', () => runImport(true))
+let impArmed = false
+document.getElementById('imp-run').addEventListener('click', e => {
+  const b = e.currentTarget
+  if (!impArmed) { impArmed = true; b.textContent = 'Click again to confirm'; setTimeout(() => { impArmed = false; b.textContent = 'Import selected' }, 6000); return }
+  impArmed = false; b.textContent = 'Import selected'; runImport(false)
+})

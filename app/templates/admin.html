@@ -17,6 +17,12 @@ form.new{display:grid;gap:6px;margin-top:10px}form.new button{width:auto}</style
 <div id="prodpick"></div>
 <button type="submit">Create and invite owner</button>
 </form>
+<h2>Import people from Project Tracker</h2>
+<p class="mini">Brings Project Tracker's companies and people into Identity with their existing passwords, so the same sign-in works here. Nobody becomes an Identity administrator. Step 1: list the companies. Step 2: tick the ones to bring across and preview (writes nothing). Step 3: import.</p>
+<p><button type="button" id="imp-list" class="chip" style="padding:3px 12px">List companies</button></p>
+<div id="imp-companies" style="margin:6px 0"></div>
+<p><button type="button" id="imp-preview" class="chip" style="padding:3px 12px">Preview selected</button> <button type="button" id="imp-run" class="chip" style="padding:3px 12px">Import selected</button></p>
+<div id="imp-out" class="mini" role="status"></div>
 <h2>Health</h2><div id="health" class="mini">Loading…</div>
 <p><button type="button" id="rotate" class="chip" style="padding:3px 12px">Rotate signing key</button> <span class="mini" id="rotmsg"></span></p>
 <h2>Recent activity</h2><div id="audit" class="mini"></div>

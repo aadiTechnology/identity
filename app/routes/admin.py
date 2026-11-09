@@ -8,7 +8,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import events, mail, models as m, security, service
+from .. import events, importer, mail, models as m, security, service
 from ..config import get_settings
 from ..db import get_db
 from ..security import new_token
@@ -206,3 +206,43 @@ def run_prune(actor: m.User = Depends(admin_user), db: Session = Depends(get_db)
     service.audit(db, "maintenance.prune", actor.id, **out)
     db.commit()
     return out
+
+
+class ImportRequest(BaseModel):
+    dry_run: bool = True
+    companies: list[str] = []  # slugs to bring across; a real import needs at least one
+
+
+@router.post("/admin/api/import/tracker")
+def import_from_tracker(b: ImportRequest, actor: m.User = Depends(admin_user), db: Session = Depends(get_db)):
+    """Brings Project Tracker's people and companies (with their existing passwords) into Identity.
+    Project Tracker must have its export switched on and share the secret. A preview (dry run) writes nothing."""
+    import urllib.error
+
+    p = db.get(m.Product, "tracker")
+    if not p or not p.webhook_url or not p.webhook_secret:
+        raise HTTPException(409, "Project Tracker is not connected yet: set TRACKER_URL and TRACKER_WEBHOOK_SECRET on Identity first.")
+    url = p.webhook_url.replace("/identity-events", "/identity-export")
+    try:
+        data = importer.fetch_tracker_export(url, p.webhook_secret)
+    except urllib.error.HTTPError as e:
+        raise HTTPException(502, {401: "Project Tracker refused the secret: it must be the same on both sides.",
+                                  404: "Project Tracker's export is switched off (set IDENTITY_EXPORT_ENABLED=true there for the import, then turn it off)."}.get(e.code, f"Project Tracker answered {e.code}."))
+    except Exception as e:
+        raise HTTPException(502, f"Could not reach Project Tracker: {e}")
+    companies = importer.summarize(data)
+    if not b.companies:
+        if not b.dry_run:
+            raise HTTPException(422, "Choose at least one company to import.")
+        return {"dry_run": True, "companies": companies, "users_created": 0, "users_updated": 0, "tenants_created": 0, "tenants_updated": 0,
+                "members_created": 0, "subscriptions_created": 0, "skipped": []}
+    known = {c["slug"] for c in companies}
+    if not set(b.companies) <= known:
+        raise HTTPException(422, "Unknown company in the selection.")
+    report = importer.import_payload(db, importer.only(data, b.companies))
+    if b.dry_run:
+        db.rollback()
+    else:
+        service.audit(db, "import.tracker", actor.id, companies=b.companies, **{k: v for k, v in report.as_dict().items() if k != "skipped"})
+        db.commit()
+    return {**report.as_dict(), "dry_run": b.dry_run, "companies": companies}

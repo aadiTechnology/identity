@@ -290,3 +290,73 @@ def test_tracker_import_is_idempotent_and_keeps_hashes(db, tmp_path):
     boss = db.query(m.User).filter_by(email="boss@acme.com").one()
     assert verify_password("Old-Password-1", boss.password_hash)[0]
     assert db.query(m.TenantMember).filter_by(user_id=boss.id).one().is_admin
+
+
+def test_import_never_creates_an_identity_administrator(db):
+    from app.importer import import_payload
+    db.add(m.Product(key="tracker", name="Project Tracker", initiate_url="https://t/x"))
+    db.commit()
+    data = {"tenants": [{"id": 1, "name": "Acme", "slug": "acme", "status": "active"}],
+            "users": [{"id": 1, "email": "Platform.Admin@Acme.com", "name": "PA", "password_hash": "$2b$04$x", "is_platform_admin": True, "status": "active"}],
+            "memberships": [{"tenant_id": 1, "user_id": 1, "status": "active", "role_key": "owner"}]}
+    import_payload(db, data)
+    db.commit()
+    u = db.query(m.User).filter_by(email="platform.admin@acme.com").one()
+    assert u.is_platform_admin is False  # the flag in the source is ignored
+
+
+def test_admin_import_button_previews_then_imports(client, db, monkeypatch):
+    prepare_world = __import__("test_events").prepare
+    w = prepare_world(db)
+    from app.routes import admin as admin_routes
+    payload = {"tenants": [{"id": 7, "name": "Live Co", "slug": "live-co", "status": "active"}],
+               "users": [{"id": 9, "email": "anjali@aadi-live.demo.test", "name": "Anjali", "password_hash": hash_password("Live-Password-1"), "status": "active"}],
+               "memberships": [{"tenant_id": 7, "user_id": 9, "status": "active", "role_key": "employee"}]}
+    seen = []
+    monkeypatch.setattr(admin_routes.importer, "fetch_tracker_export", lambda url, secret: seen.append((url, secret)) or payload)
+    login(client, "root@example.com")
+    h = {"x-csrf-token": client.cookies.get("id_csrf")}
+    listing = client.post("/admin/api/import/tracker", json={"dry_run": True}, headers=h).json()
+    assert listing["companies"] == [{"slug": "live-co", "name": "Live Co", "people": 1}] and listing["users_created"] == 0  # nothing chosen yet
+    assert client.post("/admin/api/import/tracker", json={"dry_run": False}, headers=h).status_code == 422  # a real import needs a choice
+    assert client.post("/admin/api/import/tracker", json={"dry_run": True, "companies": ["nope"]}, headers=h).status_code == 422
+    r = client.post("/admin/api/import/tracker", json={"dry_run": True, "companies": ["live-co"]}, headers=h).json()
+    assert r["dry_run"] is True and r["users_created"] == 1
+    assert seen[0][0] == "https://tracker.example.com/api/auth/identity-export" and seen[0][1] == "webhook-secret-for-tests"
+    assert db.query(m.User).filter_by(email="anjali@aadi-live.demo.test").first() is None  # preview wrote nothing
+    r = client.post("/admin/api/import/tracker", json={"dry_run": False, "companies": ["live-co"]}, headers=h).json()
+    assert r["users_created"] == 1 and r["members_created"] == 1
+    # and the imported person can now sign in here with the Project Tracker password
+    client.cookies.clear()
+    assert login(client, "anjali@aadi-live.demo.test", "Live-Password-1").status_code == 303
+    assert "Where to" not in client.get("/").text  # one company, one product: straight to the product
+    assert client.get("/").status_code == 303
+
+
+def test_import_needs_a_platform_admin_and_a_connected_tracker(client, db):
+    prepare_world = __import__("test_events").prepare
+    prepare_world(db)
+    login(client, "solo@example.com")
+    assert client.post("/admin/api/import/tracker", json={"dry_run": True}, headers={"x-csrf-token": client.cookies.get("id_csrf")}).status_code == 403
+    client.cookies.clear()
+    db.get(m.Product, "tracker").webhook_secret = ""
+    db.commit()
+    login(client, "root@example.com")
+    r = client.post("/admin/api/import/tracker", json={"dry_run": True}, headers={"x-csrf-token": client.cookies.get("id_csrf")})
+    assert r.status_code == 409 and "not connected" in r.json()["detail"]
+
+
+def test_only_the_chosen_companies_and_their_people_are_imported(db):
+    from app.importer import import_payload, only, summarize
+    data = {"tenants": [{"id": 1, "name": "Real", "slug": "real", "status": "active"}, {"id": 2, "name": "Demo", "slug": "demo", "status": "active"}],
+            "users": [{"id": 1, "email": "a@real.com", "name": "A", "password_hash": "$2b$04$x", "status": "active"},
+                      {"id": 2, "email": "b@demo.test", "name": "B", "password_hash": "$2b$04$x", "status": "active"}],
+            "memberships": [{"tenant_id": 1, "user_id": 1, "status": "active", "role_key": "employee"},
+                            {"tenant_id": 2, "user_id": 2, "status": "active", "role_key": "owner"}]}
+    assert {c["slug"]: c["people"] for c in summarize(data)} == {"real": 1, "demo": 1}
+    db.add(m.Product(key="tracker", name="Project Tracker", initiate_url="https://t/x"))
+    db.commit()
+    import_payload(db, only(data, ["real"]))
+    db.commit()
+    assert [u.email for u in db.query(m.User)] == ["a@real.com"]  # the demo company and its known-password people stayed behind
+    assert [t.slug for t in db.query(m.Tenant)] == ["real"]
