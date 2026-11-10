@@ -86,6 +86,7 @@ def invite_member(b: Invite, ctx=Depends(company_admin), db: Session = Depends(g
         mem = m.TenantMember(tenant_id=t.id, user_id=u.id)
         db.add(mem)
     db.flush()
+    service.register_all_subscribed(db, t, u.id, "company", actor.email)
     events.emit(db, "membership.added", tenant=t, user=u, member=mem)
     service.audit(db, "member.invited", actor.id, t.id, email=email)
     db.commit()

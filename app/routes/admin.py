@@ -86,6 +86,8 @@ def create_tenant(b: NewTenant, actor: m.User = Depends(admin_user), db: Session
     for k in b.products:
         db.add(m.Subscription(tenant_id=t.id, product_key=k))
     db.flush()
+    db.refresh(t)
+    service.register_all_subscribed(db, t, u.id, "admin", actor.email)
     events.emit(db, "membership.added", tenant=t, user=u, member=mem)
     service.audit(db, "tenant.created", actor.id, t.id, name=t.name, products=b.products)
     db.commit()
@@ -112,6 +114,10 @@ def set_subscription(tid: str, b: SubChange, actor: m.User = Depends(admin_user)
         db.add(s)
     s.status, s.valid_until = b.status, b.valid_until
     db.flush()
+    if service.subscription_live(s):  # the company's administrators can reach a product the company has just got (to become its first administrator)
+        for mem in t.members:
+            if mem.is_admin and mem.status == "active":
+                service.register(db, tid, mem.user_id, b.product, "admin", actor.email)
     events.emit(db, "subscription.changed", tenant=t, subscription=s, only_product=b.product)
     service.audit(db, "subscription.changed", actor.id, tid, product=b.product, status=b.status)
     db.commit()

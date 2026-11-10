@@ -211,7 +211,7 @@ def my_products(request: Request, authorization: str | None = Header(default=Non
         u = cur[1] if cur else None
     if not u:
         return JSONResponse({"error": "unauthorized"}, 401)
-    pairs = service.eligible_pairs(db, u)
+    pairs = service.visible_pairs(db, u)
     return {"next": service.next_step(pairs), "hub": get_settings().issuer + "/",
             "items": [{"tenant_id": p.tenant_id, "tenant": p.tenant_name, "product": p.product_key, "product_name": p.product_name,
                        "url": service.product_entry_url(p)} for p in pairs]}

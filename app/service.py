@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from . import models as m
@@ -88,3 +88,47 @@ def revoke_user_everywhere(db: Session, user: m.User):
         s.revoked = True
     for r in db.execute(select(m.RefreshToken).where(m.RefreshToken.user_id == user.id)).scalars():
         r.revoked = True
+
+
+# ---- which products a person is registered in ----
+def register(db: Session, tenant_id: str, user_id: str, product_key: str, source: str, by: str = "") -> m.MemberProduct:
+    """Register a person in a product of a company (or make a removed registration active again)."""
+    r = db.execute(select(m.MemberProduct).where(m.MemberProduct.tenant_id == tenant_id, m.MemberProduct.user_id == user_id,
+                                                 m.MemberProduct.product_key == product_key)).scalar_one_or_none()
+    if r is None:
+        r = m.MemberProduct(tenant_id=tenant_id, user_id=user_id, product_key=product_key, status="active", source=source, created_by=by)
+        db.add(r)
+    else:
+        r.status = "active"
+    db.flush()
+    return r
+
+
+def register_all_subscribed(db: Session, tenant: m.Tenant, user_id: str, source: str, by: str = "") -> list[str]:
+    """Register in every product the company has live (what the company page and a new company always did)."""
+    keys = [s.product_key for s in tenant.subscriptions if subscription_live(s)]
+    for k in keys:
+        register(db, tenant.id, user_id, k, source, by)
+    return keys
+
+
+def registered_products(db: Session, tenant_id: str, user_id: str) -> list[str]:
+    return sorted(db.scalars(select(m.MemberProduct.product_key).where(m.MemberProduct.tenant_id == tenant_id, m.MemberProduct.user_id == user_id,
+                                                                       m.MemberProduct.status == "active")))
+
+
+def seats_used(db: Session, tenant_id: str, product_key: str) -> int:
+    """Active members of the company registered in the product (suspended or removed people do not use a seat)."""
+    return db.scalar(select(func.count()).select_from(m.MemberProduct).join(
+        m.TenantMember, (m.TenantMember.tenant_id == m.MemberProduct.tenant_id) & (m.TenantMember.user_id == m.MemberProduct.user_id)
+    ).where(m.MemberProduct.tenant_id == tenant_id, m.MemberProduct.product_key == product_key, m.MemberProduct.status == "active",
+            m.TenantMember.status == "active")) or 0
+
+
+def visible_pairs(db: Session, user: m.User) -> list[Pair]:
+    """What the switcher and hub show: the products the person is registered in, among the ones they may open.
+    If they are registered in none of them (an older account), show everything they may open rather than nothing."""
+    allowed = eligible_pairs(db, user)
+    reg = {(r.tenant_id, r.product_key) for r in db.scalars(select(m.MemberProduct).where(m.MemberProduct.user_id == user.id, m.MemberProduct.status == "active"))}
+    shown = [p for p in allowed if (p.tenant_id, p.product_key) in reg]
+    return shown or allowed

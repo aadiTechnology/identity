@@ -51,7 +51,7 @@ def hub(request: Request, db: Session = Depends(get_db)):
     if not cur:
         return RedirectResponse("/login", 303)
     _, user = cur
-    pairs = service.eligible_pairs(db, user)
+    pairs = service.visible_pairs(db, user)
     step = service.next_step(pairs)
     if step == "none":
         if user.is_platform_admin:  # administrators belong to no company: offer the admin console and sign out, not an error

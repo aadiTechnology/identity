@@ -190,3 +190,18 @@ class Outbox(Base):
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     failed: Mapped[bool] = mapped_column(Boolean, default=False)  # gave up after the last retry
     last_error: Mapped[str] = mapped_column(String(300), default="")
+
+
+class MemberProduct(Base):
+    """A person's registration in one product of a company. Decides which products the switcher shows them; it is NOT a sign-in gate
+    (that is the company's live subscription plus an active membership). Counted against the product's seats."""
+    __tablename__ = "member_products"
+    __table_args__ = (UniqueConstraint("tenant_id", "user_id", "product_key"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    product_key: Mapped[str] = mapped_column(ForeignKey("products.key"))
+    status: Mapped[str] = mapped_column(String(20), default="active")  # active | removed
+    source: Mapped[str] = mapped_column(String(20), default="backfill")  # backfill | company | admin | product
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

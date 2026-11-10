@@ -35,6 +35,19 @@ def register_product(a):
     print("Product registered:", a.key)
 
 
+def set_product_secret(a):
+    """Create (or replace) the shared secret a product uses to call Identity (snapshot reads and enrolling people). Shown once."""
+    with SessionLocal() as db:
+        p = db.get(m.Product, a.key)
+        if p is None:
+            sys.exit(f"No product {a.key!r}. Register it first with register-product.")
+        secret = new_token()[0]
+        p.webhook_secret = secret
+        db.commit()
+    print(f"Secret for {a.key} (shown once; put it in that product's IDENTITY_PRODUCT_SECRET):")
+    print(secret)
+
+
 def register_client(a):
     secret = None
     with SessionLocal() as db:
@@ -198,6 +211,9 @@ def main():
     x.add_argument("--initiate-url", required=True)
     x.add_argument("--description", default="")
     x.set_defaults(f=register_product)
+    x = sp.add_parser("set-product-secret")
+    x.add_argument("--key", required=True)
+    x.set_defaults(f=set_product_secret)
     x = sp.add_parser("register-client")
     x.add_argument("--client-id", required=True)
     x.add_argument("--product", required=True)

@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import get_settings
 from .db import SessionLocal, engine
 from . import events
-from .routes import admin, company, oidc, sync, ui
+from .routes import admin, company, oidc, products, sync, ui
 from .security import ensure_signing_key
 
 
@@ -53,6 +53,7 @@ app.include_router(oidc.router)
 app.include_router(admin.router)
 app.include_router(company.router)
 app.include_router(sync.router)
+app.include_router(products.router)
 if not get_settings().is_prod:
     from .routes import demo
 
