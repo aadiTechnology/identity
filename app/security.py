@@ -121,11 +121,11 @@ def jwks(db: Session) -> dict:
     return {"keys": [_key_material(k)[2] for k in db.execute(select(m.SigningKey).where(m.SigningKey.published.is_(True))).scalars()]}
 
 
-def sign(db: Session, claims: dict, minutes: int) -> str:
+def sign(db: Session, claims: dict, minutes: int, typ: str | None = None) -> str:
     k = ensure_signing_key(db)
     now = datetime.now(tz=__import__("datetime").timezone.utc)
     body = {**claims, "iss": get_settings().issuer, "iat": now, "exp": now + timedelta(minutes=minutes)}
-    return jwt.encode(body, _key_material(k)[0], algorithm="RS256", headers={"kid": k.kid})
+    return jwt.encode(body, _key_material(k)[0], algorithm="RS256", headers={"kid": k.kid, **({"typ": typ} if typ else {})})
 
 
 def verify(db: Session, token: str, audience: str | None = None) -> dict:

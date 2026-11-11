@@ -92,3 +92,13 @@ Reproduce with `python ops/loadtest.py http://localhost:8802 --users 30 --second
 3. Whether administrators must have a second sign-in step (multi-factor). Not built.
 4. Seat limits per subscription: the number is stored but not enforced.
 5. Token lifetimes (access 15 minutes, refresh 14 days, Project Tracker session 60 minutes).
+
+## Service tokens (shared services, e.g. the Video Engine)
+
+A product's **server** gets a short-lived token to call a shared service for one company. People never use this.
+
+- **Request:** `POST /token` with `grant_type=client_credentials`, the client id and secret (form fields or HTTP Basic), `audience` (the service key, e.g. `video-engine`), `scope` (space separated, e.g. `video:create video:read`) and `tenant_id` (the company the call is for).
+- **Token:** RS256, header `typ: at+jwt`, life 10 minutes (`SERVICE_TOKEN_MINUTES`), claims `iss, aud, sub, client_id, scope, tenant_id, caller_product, jti, iat, exp`. Verify with the JWKS at `/.well-known/jwks.json`. No refresh token: ask again.
+- **Refused unless all hold:** client active and secret right; the service is registered (`kind=service`) and allowed for that client; scopes are a subset of the client's; the company exists and is active; **the company has a live subscription to the calling product and to the service** (stops a product asking for a company that does not use it). Refusals are audited (`service_token.denied`); issues too (`service_token.issued`).
+- **Set up:** the `video-engine` service exists after the migration. In `/admin`: turn the "Video Engine (service)" chip on for each company, then create a client under "Service clients" (the secret is shown once). Rotate a secret or disable a client there; the old secret stops working at once, tokens already issued live out their 10 minutes.
+- **CLI:** `python -m app.cli register-service --key <key> --name <name>` registers another service.

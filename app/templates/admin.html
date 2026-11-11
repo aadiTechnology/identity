@@ -23,10 +23,23 @@ form.new{display:grid;gap:6px;margin-top:10px}form.new button{width:auto}</style
 <div id="imp-companies" style="margin:6px 0"></div>
 <p><button type="button" id="imp-preview" class="chip" style="padding:3px 12px">Preview selected</button> <button type="button" id="imp-run" class="chip" style="padding:3px 12px">Import selected</button></p>
 <div id="imp-out" class="mini" role="status"></div>
+<h2>Service clients</h2>
+<p class="mini">How a product's server gets a short-lived token to call a shared service (such as the Video Engine) for one company. A company must be subscribed to both the calling product and the service; turn the service on for a company with its chip above. A secret is shown once.</p>
+<div id="svc-clients"></div>
+<form class="new" id="svcform">
+<label for="sc-id">Client id</label><input id="sc-id" type="text" placeholder="academic-video" required>
+<label for="sc-name">Name</label><input id="sc-name" type="text" required>
+<label for="sc-prod">Calling product</label><select id="sc-prod"></select>
+<label for="sc-aud">Service</label><select id="sc-aud"></select>
+<label for="sc-scope">Scopes (space separated)</label><input id="sc-scope" type="text" value="video:create video:read video:cancel" required>
+<button type="submit">Create client</button>
+</form>
+<div id="svc-secret" class="mini" role="status"></div>
 <h2>Health</h2><div id="health" class="mini">Loading…</div>
 <p><button type="button" id="rotate" class="chip" style="padding:3px 12px">Rotate signing key</button> <span class="mini" id="rotmsg"></span></p>
 <h2>Recent activity</h2><div id="audit" class="mini"></div>
 <form method="post" action="/logout" style="margin:10px 0 0"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" style="width:auto;margin:0;padding:6px 14px;background:none;color:var(--brand);border:1px solid var(--line)">Sign out</button></form>
 <div class="foot"><span class="muted">{{ user.email }}</span><a href="/">Back to my products</a></div>
 <script src="/static/admin.js" defer></script>
+<script src="/static/admin-services.js" defer></script>
 {% endblock %}

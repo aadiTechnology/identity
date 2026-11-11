@@ -45,7 +45,7 @@ def _tenant_dict(t: m.Tenant) -> dict:
 @router.get("/admin/api/overview")
 def overview(_: m.User = Depends(admin_user), db: Session = Depends(get_db)):
     tenants = db.execute(select(m.Tenant).order_by(m.Tenant.name)).scalars().all()
-    return {"products": [{"key": p.key, "name": p.name, "active": p.active} for p in db.execute(select(m.Product)).scalars()],
+    return {"products": [{"key": p.key, "name": p.name, "active": p.active, "kind": p.kind} for p in db.execute(select(m.Product)).scalars()],
             "tenants": [_tenant_dict(t) for t in tenants], "users": db.query(m.User).count(),
             "audit": [{"at": a.at.isoformat(), "action": a.action, "detail": a.detail} for a in db.execute(select(m.AuditLog).order_by(m.AuditLog.at.desc()).limit(15)).scalars()]}
 
@@ -178,6 +178,75 @@ def rotate(actor: m.User = Depends(admin_user), db: Session = Depends(get_db)):
     service.audit(db, "key.rotated", actor.id, kid=k.kid)
     db.commit()
     return {"kid": k.kid}
+
+
+# ---- service clients: how a product's server gets tokens for a shared service ----
+def _client_dict(c: m.ServiceClient) -> dict:
+    return {"client_id": c.client_id, "name": c.name, "product": c.product_key, "audiences": c.audiences, "scopes": c.scopes, "active": c.active,
+            "secret_rotated_at": m.aware(c.secret_rotated_at).isoformat()}
+
+
+@router.get("/admin/api/service-clients")
+def list_service_clients(_: m.User = Depends(admin_user), db: Session = Depends(get_db)):
+    return {"clients": [_client_dict(c) for c in db.execute(select(m.ServiceClient).order_by(m.ServiceClient.client_id)).scalars()],
+            "services": [{"key": p.key, "name": p.name} for p in db.execute(select(m.Product).where(m.Product.kind == "service")).scalars()]}
+
+
+class NewServiceClient(BaseModel):
+    client_id: str
+    name: str
+    product_key: str
+    audiences: list[str]
+    scopes: list[str]
+
+
+@router.post("/admin/api/service-clients")
+def create_service_client(b: NewServiceClient, actor: m.User = Depends(admin_user), db: Session = Depends(get_db)):
+    """Creates the credential. The secret is returned once and only its hash is kept."""
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{2,60}", b.client_id) or db.get(m.ServiceClient, b.client_id):
+        raise HTTPException(409, "Use 3-60 lowercase letters, digits or dashes; the name must be new")
+    if not db.get(m.Product, b.product_key):
+        raise HTTPException(422, "Unknown calling product")
+    for a in b.audiences:
+        p = db.get(m.Product, a)
+        if not p or p.kind != "service":
+            raise HTTPException(422, f"{a} is not a registered service")
+    if not b.audiences or not b.scopes:
+        raise HTTPException(422, "Choose at least one service and one scope")
+    secret = new_token()[0]
+    c = m.ServiceClient(client_id=b.client_id, name=b.name.strip(), product_key=b.product_key, secret_hash=security.hash_token(secret),
+                        audiences=b.audiences, scopes=b.scopes)
+    db.add(c)
+    service.audit(db, "service_client.created", actor.id, None, client=c.client_id, audiences=b.audiences, scopes=b.scopes)
+    db.commit()
+    return {**_client_dict(c), "secret": secret}
+
+
+@router.post("/admin/api/service-clients/{cid}/rotate")
+def rotate_service_client(cid: str, actor: m.User = Depends(admin_user), db: Session = Depends(get_db)):
+    c = db.get(m.ServiceClient, cid)
+    if not c:
+        raise HTTPException(404, "Not found")
+    secret = new_token()[0]
+    c.secret_hash, c.secret_rotated_at = security.hash_token(secret), m.now()
+    service.audit(db, "service_client.rotated", actor.id, None, client=cid)
+    db.commit()
+    return {**_client_dict(c), "secret": secret}
+
+
+class ClientActive(BaseModel):
+    active: bool
+
+
+@router.post("/admin/api/service-clients/{cid}/status")
+def set_service_client_status(cid: str, b: ClientActive, actor: m.User = Depends(admin_user), db: Session = Depends(get_db)):
+    c = db.get(m.ServiceClient, cid)
+    if not c:
+        raise HTTPException(404, "Not found")
+    c.active = b.active
+    service.audit(db, "service_client.enabled" if b.active else "service_client.disabled", actor.id, None, client=cid)
+    db.commit()
+    return _client_dict(c)
 
 
 @router.get("/admin/api/ops")

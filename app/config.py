@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     access_token_minutes: int = 15
     id_token_minutes: int = 15
     refresh_token_days: int = 14
+    service_token_minutes: int = 10  # service tokens (client_credentials) are short-lived; callers cache and renew
     auth_code_seconds: int = 60
     lock_after_failures: int = 5
     lock_minutes: int = 15

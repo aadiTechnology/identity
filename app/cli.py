@@ -35,6 +35,16 @@ def register_product(a):
     print("Product registered:", a.key)
 
 
+def register_service(a):
+    """A shared service that products call (not a place people sign in). Companies are entitled to it through a normal subscription."""
+    with SessionLocal() as db:
+        p = db.get(m.Product, a.key) or m.Product(key=a.key, name=a.name)
+        p.name, p.description, p.kind, p.active = a.name, a.description, "service", True
+        db.merge(p)
+        db.commit()
+    print("Service registered:", a.key)
+
+
 def set_product_secret(a):
     """Create (or replace) the shared secret a product uses to call Identity (snapshot reads and enrolling people). Shown once."""
     with SessionLocal() as db:
@@ -211,6 +221,11 @@ def main():
     x.add_argument("--initiate-url", required=True)
     x.add_argument("--description", default="")
     x.set_defaults(f=register_product)
+    x = sp.add_parser("register-service")
+    x.add_argument("--key", required=True)
+    x.add_argument("--name", required=True)
+    x.add_argument("--description", default="")
+    x.set_defaults(f=register_service)
     x = sp.add_parser("set-product-secret")
     x.add_argument("--key", required=True)
     x.set_defaults(f=set_product_secret)

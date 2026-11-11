@@ -278,7 +278,7 @@ def test_the_migration_registers_every_active_member_in_every_product_their_comp
         for tid in ("T1", "T2"):
             c.execute(sa.text("INSERT INTO tenants (id, name, slug, status, created_at) VALUES (:i, :n, :s, 'active', :c)"), {"i": tid, "n": tid, "s": tid.lower(), "c": datetime.now(timezone.utc)})
         for key in ("tracker", "dms"):
-            c.execute(sa.text("INSERT INTO products (key, name, description, initiate_url, active, webhook_url, webhook_secret) VALUES (:k, :k, '', '', 1, '', '')"), {"k": key})
+            c.execute(sa.text("INSERT INTO products (key, name, description, initiate_url, active, webhook_url, webhook_secret, kind) VALUES (:k, :k, '', '', 1, '', '', 'product')"), {"k": key})
         for uid in ("U1", "U2", "U3"):
             c.execute(sa.text("INSERT INTO users (id, email, name, password_hash, is_platform_admin, status, failed_logins, token_epoch, created_at) VALUES (:i, :e, :i, '', 0, 'active', 0, 0, :c)"),
                       {"i": uid, "e": uid.lower() + "@x.test", "c": datetime.now(timezone.utc)})

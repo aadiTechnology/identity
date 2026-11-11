@@ -24,7 +24,7 @@ def discovery():
     i = get_settings().issuer
     return {"issuer": i, "authorization_endpoint": f"{i}/authorize", "token_endpoint": f"{i}/token",
             "userinfo_endpoint": f"{i}/userinfo", "jwks_uri": f"{i}/.well-known/jwks.json", "end_session_endpoint": f"{i}/logout",
-            "response_types_supported": ["code"], "grant_types_supported": ["authorization_code", "refresh_token"],
+            "response_types_supported": ["code"], "grant_types_supported": ["authorization_code", "refresh_token", "client_credentials"],
             "subject_types_supported": ["public"], "id_token_signing_alg_values_supported": ["RS256"],
             "code_challenge_methods_supported": ["S256"], "scopes_supported": ["openid", "profile", "email", "offline_access"],
             "token_endpoint_auth_methods_supported": ["client_secret_post", "client_secret_basic", "none"],
@@ -110,6 +110,53 @@ def _client_auth(db, request: Request, client_id: str, client_secret: str, autho
     return c
 
 
+def _service_client(db, client_id: str, client_secret: str, authorization: str | None):
+    if authorization and authorization.lower().startswith("basic "):
+        import base64
+        try:
+            client_id, _, client_secret = base64.b64decode(authorization[6:]).decode().partition(":")
+        except Exception:
+            return None
+    c = db.get(m.ServiceClient, client_id)
+    if not c or not c.active or not client_secret or not secrets.compare_digest(c.secret_hash, hash_token(client_secret)):
+        return None
+    return c
+
+
+def _client_credentials(db: Session, ip: str, client_id: str, client_secret: str, authorization: str | None, audience: str, scope: str, tenant_id: str):
+    """A product's server asks for a token to call a shared service for ONE company. The token carries that company, so the service never has to trust a header."""
+    c = _service_client(db, client_id, client_secret, authorization)
+    if not c:
+        if ratelimit.hit(f"token-bad-client:{ip}", 20):
+            return _oauth_error("slow_down", "Too many failed attempts", 429)
+        return _oauth_error("invalid_client", status=401)
+    svc = db.get(m.Product, audience)
+    if not audience or not svc or svc.kind != "service" or not svc.active or audience not in (c.audiences or []):
+        return _oauth_error("invalid_target", "This client may not ask for a token for that service")
+    wanted = scope.split()
+    if not wanted or not set(wanted) <= set(c.scopes or []):
+        return _oauth_error("invalid_scope", "Scope not allowed for this client")
+    t = db.get(m.Tenant, tenant_id) if tenant_id else None
+    if not t or t.status not in ("active", "trial"):
+        return _oauth_error("invalid_request", "Unknown or inactive company (tenant_id)")
+    # Two checks, so a product can never obtain a token for a company that does not use it (confused deputy):
+    if not service.service_entitled(db, t.id, c.product_key):
+        service.audit(db, "service_token.denied", None, t.id, client=c.client_id, reason="caller_not_subscribed", audience=audience)
+        db.commit()
+        return _oauth_error("access_denied", "The company has no active subscription for the calling product")
+    if not service.service_entitled(db, t.id, audience):
+        service.audit(db, "service_token.denied", None, t.id, client=c.client_id, reason="service_not_entitled", audience=audience)
+        db.commit()
+        return _oauth_error("access_denied", "The company has no active subscription for this service")
+    minutes = get_settings().service_token_minutes
+    tok = security.sign(db, {"sub": c.client_id, "client_id": c.client_id, "aud": audience, "scope": " ".join(wanted), "tenant_id": t.id,
+                             "caller_product": c.product_key, "jti": m.new_id()}, minutes, typ="at+jwt")
+    service.audit(db, "service_token.issued", None, t.id, client=c.client_id, audience=audience, scope=" ".join(wanted))
+    db.commit()
+    return JSONResponse({"token_type": "Bearer", "access_token": tok, "expires_in": minutes * 60, "scope": " ".join(wanted)},
+                        headers={"Cache-Control": "no-store", "Pragma": "no-cache"})
+
+
 def _issue(db: Session, c: m.OAuthClient, user: m.User, tenant_id: str, session_id: str, nonce: str, family: str | None = None):
     cfg = get_settings()
     t = db.get(m.Tenant, tenant_id)
@@ -131,10 +178,12 @@ def _still_eligible(db, user: m.User, tenant_id: str, product_key: str) -> bool:
 @router.post("/token")
 def token(request: Request, grant_type: str = Form(""), code: str = Form(""), redirect_uri: str = Form(""), code_verifier: str = Form(""),
           refresh_token: str = Form(""), client_id: str = Form(""), client_secret: str = Form(""),
-          authorization: str | None = Header(default=None), db: Session = Depends(get_db)):
+          audience: str = Form(""), scope: str = Form(""), tenant_id: str = Form(""), authorization: str | None = Header(default=None), db: Session = Depends(get_db)):
     ip = request.client.host if request.client else "?"
     if ratelimit.hit(f"token:{ip}", get_settings().token_rate_per_minute):
         return _oauth_error("slow_down", "Too many requests", 429)
+    if grant_type == "client_credentials":
+        return _client_credentials(db, ip, client_id, client_secret, authorization, audience, scope, tenant_id)
     c = _client_auth(db, request, client_id, client_secret, authorization)
     if not c:
         if ratelimit.hit(f"token-bad-client:{ip}", 20):  # someone is guessing client secrets

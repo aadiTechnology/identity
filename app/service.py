@@ -44,7 +44,7 @@ def eligible_pairs(db: Session, user: m.User) -> list[Pair]:
     for _, t in rows:
         for s in sorted(t.subscriptions, key=lambda x: x.product_key):
             p = db.get(m.Product, s.product_key)
-            if p and p.active and subscription_live(s):
+            if p and p.active and p.kind == "product" and subscription_live(s):
                 out.append(Pair(t.id, t.name, t.slug, p.key, p.name, p.description, p.initiate_url))
     return out
 
@@ -132,3 +132,11 @@ def visible_pairs(db: Session, user: m.User) -> list[Pair]:
     reg = {(r.tenant_id, r.product_key) for r in db.scalars(select(m.MemberProduct).where(m.MemberProduct.user_id == user.id, m.MemberProduct.status == "active"))}
     shown = [p for p in allowed if (p.tenant_id, p.product_key) in reg]
     return shown or allowed
+
+
+# ---- service tokens (client_credentials) ----
+def service_entitled(db: Session, tenant_id: str, product_key: str) -> bool:
+    """Does the company have a live subscription to this product or service?"""
+    s = db.execute(select(m.Subscription).where(m.Subscription.tenant_id == tenant_id, m.Subscription.product_key == product_key)).scalar_one_or_none()
+    p = db.get(m.Product, product_key)
+    return bool(s and p and p.active and subscription_live(s))

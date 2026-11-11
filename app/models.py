@@ -70,6 +70,7 @@ class Product(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     webhook_url: Mapped[str] = mapped_column(String(400), default="")  # where change events are delivered (empty = none)
     webhook_secret: Mapped[str] = mapped_column(String(100), default="")  # signs events and authorises the product's snapshot reads
+    kind: Mapped[str] = mapped_column(String(10), default="product")  # product (people sign in) | service (called by products, e.g. video-engine)
 
 
 class Subscription(Base):
@@ -93,6 +94,20 @@ class OAuthClient(Base):
     redirect_uris: Mapped[list] = mapped_column(JSON, default=list)
     post_logout_redirect_uris: Mapped[list] = mapped_column(JSON, default=list)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class ServiceClient(Base):
+    """A product's server-side credential for calling a shared service (OAuth client_credentials). Never used for people."""
+    __tablename__ = "service_clients"
+    client_id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    product_key: Mapped[str] = mapped_column(ForeignKey("products.key"))  # the calling product; it must be subscribed for the tenant it asks about
+    secret_hash: Mapped[str] = mapped_column(String(100))
+    audiences: Mapped[list] = mapped_column(JSON, default=list)  # service keys this client may ask tokens for, e.g. ["video-engine"]
+    scopes: Mapped[list] = mapped_column(JSON, default=list)  # e.g. ["video:create", "video:read", "video:cancel"]
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    secret_rotated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
 class LoginSession(Base):
