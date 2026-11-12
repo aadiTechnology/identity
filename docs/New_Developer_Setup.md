@@ -42,9 +42,9 @@ Titles, roles and managers are not in the workbook; they were filled in so that 
 
 | Project | Seed code | Run it (Windows) | Start over (erases the local data) |
 |---|---|---|---|
-| Identity (`identity`) | `app	est_tenant.py` (people, company, subscriptions); `dev-setup` in `app\cli.py` (registers the local products and sign-in clients) | `.venv\Scripts\python.exe -m app.cli dev-setup` | `.venv\Scripts\python.exe -m app.cli reset-and-seed-test` |
-| Project Tracker (`ProjectTrackingackend`) | `app\seed_aadi_test.py`; data in `app\seed_dataadi_matrix.json` (built from `docs\Aadi Technology Matrix_V4.xlsx`) | `set APP_ENV=demo` and `set DATABASE_URL=postgresql+psycopg://tracker:tracker_dev@localhost:15434/tracker_aadi_test`, then `.venv\Scripts\python.exe -m app.seed_aadi_test` | the same command with `--reset` |
-| Academic (`Media\Academicsackend`) | `app\seed_aadi_test.py`; sample lesson in `app\seed_dataefraction\` | `set DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:15441/academic_aadi_test`, `set AUTH_MODE=dev`, `set APP_ENV=development`, then `.venv\Scripts\python.exe -m app.seed_aadi_test` | the same command with `--reset` |
+| Identity (`identity`) | `app\test_tenant.py` (people, company, subscriptions); `dev-setup` in `app\cli.py` (registers the local products and sign-in clients) | `.venv\Scripts\python.exe -m app.cli dev-setup` | `.venv\Scripts\python.exe -m app.cli reset-and-seed-test` |
+| Project Tracker (`ProjectTracking\backend`) | `app\seed_aadi_test.py`; data in `app\seed_data\aadi_matrix.json` (built from `docs\Aadi Technology Matrix_V4.xlsx`) | `set APP_ENV=demo` and `set DATABASE_URL=postgresql+psycopg://tracker:tracker_dev@localhost:15434/tracker_aadi_test`, then `.venv\Scripts\python.exe -m app.seed_aadi_test` | the same command with `--reset` |
+| Academic (`Media\Academics\backend`) | `app\seed_aadi_test.py`; sample lesson in `app\seed_data\refraction\` | `set DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:15441/academic_aadi_test`, `set AUTH_MODE=dev`, `set APP_ENV=development`, then `.venv\Scripts\python.exe -m app.seed_aadi_test` | the same command with `--reset` |
 
 What each seed loads:
 - **Identity:** the company Aadi-Test, its 15 people (shared password `AadiTest@2026`), the Project Tracker, Academic and Video Engine entries with their local sign-in clients. Nobody is a platform administrator. For a local platform administrator: `set IDENTITY_ADMIN_PASSWORD=<your choice>` then `.venv\Scripts\python.exe -m app.cli create-admin --email you@example.com --name "Your Name"`.
