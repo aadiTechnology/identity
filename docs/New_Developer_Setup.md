@@ -53,7 +53,7 @@ What each seed loads:
 
 Order matters only once: run `identity\setup.bat` first if you want real Aadi sign-in between products (it creates the products and sign-in clients the other two use). The three seeds use the same company id, `5ca1ab1e-aad1-4e57-8000-000000000001`, so a person who signs in through Identity lands in the right company in each product.
 
-**Changing the data:** edit `Aadi Technology Matrix_V4.xlsx`, run `python backend	oolsuild_matrix_seed.py` in `ProjectTracking` (needs `pip install openpyxl`), then run the Tracker seed with `--reset`. To change the people, edit the same list in all three seeds (`PEOPLE` in each file) and keep them identical.
+**Changing the data:** edit `Aadi Technology Matrix_V4.xlsx`, run `python backend\tools\build_matrix_seed.py` in `ProjectTracking` (needs `pip install openpyxl`), then run the Tracker seed with `--reset`. To change the people, edit the same list in all three seeds (`PEOPLE` in each file) and keep them identical.
 
 ## Signing in through Aadi Identity locally (optional, the real flow)
 
