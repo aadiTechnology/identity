@@ -10,6 +10,10 @@ services:
       - SERVICE_FQDN_APP_8000
       - APP_ENV=${APP_ENV:-production}
       - APP_SEED_DEMO=${APP_SEED_DEMO:-false}
+      - TEST_LOGINS_ENABLED=${TEST_LOGINS_ENABLED:-false}
+      - APP_MAINTENANCE=${APP_MAINTENANCE:-}
+      - APP_MAINTENANCE_ID=${APP_MAINTENANCE_ID:-}
+      - APP_MAINTENANCE_CONFIRM=${APP_MAINTENANCE_CONFIRM:-}
       - TRACKER_URL=${TRACKER_URL:-}
       - TRACKER_WEBHOOK_SECRET=${TRACKER_WEBHOOK_SECRET:-}
       - ISSUER=${ISSUER:-https://id.aadiprojecttracker.aaditechnology.com}

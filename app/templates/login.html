@@ -14,4 +14,18 @@
 <button type="submit">Sign in</button>
 </form>
 <div class="foot"><a href="/forgot">Forgot password?</a></div>
+{% if test_people %}
+<h2 style="margin-top:22px">Test company: Aadi-Test</h2>
+<p class="muted" style="font-size:13px">Fictional people for developers and demos. Everyone uses the password <b>{{ test_password }}</b>. Click a name to sign in.</p>
+<div class="testlist">
+{% for p in test_people %}
+<form method="post" action="/login" class="testrow">
+<input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="next" value="{{ next }}">
+<input type="hidden" name="email" value="{{ p.email }}"><input type="hidden" name="password" value="{{ test_password }}">
+<button type="submit" class="testbtn"><b>{{ p.name }}</b> <span>{{ p.title }}</span><small>{{ p.email }}</small></button>
+</form>
+{% endfor %}
+</div>
+<style>.testlist{display:grid;gap:6px;margin-top:8px}.testrow{margin:0}.testbtn{width:100%;text-align:left;background:var(--card,#fff);color:inherit;border:1px solid var(--line,#dfe3ee);border-radius:8px;padding:8px 10px;cursor:pointer;display:grid;gap:0}.testbtn span{font-size:12px;opacity:.8}.testbtn small{font-size:11px;opacity:.6}.testbtn:hover{border-color:#2f5bea}</style>
+{% endif %}
 {% endblock %}

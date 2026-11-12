@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     lock_minutes: int = 15
     login_rate_per_minute: int = 30
     token_rate_per_minute: int = 600  # per calling address; products call from their servers, so this is generous
+    test_logins_enabled: bool = False  # true: the sign-in page lists the Aadi-Test accounts with one-click sign-in (never for a real company's data)
     webhooks_enabled: bool = True  # background delivery of change events to products
     # email: file (writes to var/outbox) or smtp
     email_backend: str = "file"

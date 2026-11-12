@@ -70,7 +70,19 @@ def hub(request: Request, db: Session = Depends(get_db)):
 def login_page(request: Request, next: str = "/", db: Session = Depends(get_db)):
     if current(request, db):
         return RedirectResponse(safe_next(next), 303)
-    return render(request, "login.html", {"next": safe_next(next)})
+    return render(request, "login.html", {"next": safe_next(next), **test_accounts(db)})
+
+
+def test_accounts(db: Session) -> dict:
+    """The Aadi-Test people for the sign-in page, only when TEST_LOGINS_ENABLED is on and the company exists."""
+    if not get_settings().test_logins_enabled:
+        return {}
+    from .. import test_tenant
+
+    if db.get(m.Tenant, test_tenant.TENANT_ID) is None:
+        return {}
+    return {"test_people": [{"email": test_tenant.email_of(f), "name": n, "title": t, "hint": h} for f, n, t, _tr, _ar, h in test_tenant.PEOPLE],
+            "test_password": test_tenant.PASSWORD}
 
 
 @router.post("/login")

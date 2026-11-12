@@ -148,12 +148,73 @@ def _register_tracker(url: str):
         db.commit()
 
 
+DEV_ACADEMICS_SECRET = "dev-academics-secret"  # local development only (the real instance gets a random one)
+
+
+def dev_setup(a):
+    """Local development: registers Project Tracker, Academic Video Creation and the Video Engine service with their local addresses and sign-in
+    clients, then seeds the Aadi-Test company. Safe to repeat. Addresses: Tracker http://localhost:8000, Academic web http://localhost:5174."""
+    from . import test_tenant
+
+    tracker, academic = a.tracker_url.rstrip("/"), a.academic_url.rstrip("/")
+    with SessionLocal() as db:
+        ensure_signing_key(db)
+        db.merge(m.Product(key="tracker", name="Project Tracker", description="Projects, timesheets and profitability", initiate_url=f"{tracker}/api/auth/sso/start", active=True))
+        db.merge(m.Product(key="academics", name="Academic Video Creation", description="Lessons to narrated videos", initiate_url=f"{academic}/auth/login", active=True))
+        db.merge(m.Product(key="video-engine", name="Video Engine", description="Shared service: turns approved scripts into narrated videos", kind="service", active=True))
+        db.flush()
+        db.merge(m.OAuthClient(client_id="tracker-web", product_key="tracker", name="Project Tracker", redirect_uris=[f"{tracker}/api/auth/sso/callback"],
+                               post_logout_redirect_uris=[f"{tracker}/"], active=True))
+        db.merge(m.OAuthClient(client_id="academics-web", product_key="academics", name="Academic Video Creation", secret_hash=hash_token(DEV_ACADEMICS_SECRET),
+                               redirect_uris=[f"{academic}/auth/callback"], post_logout_redirect_uris=[f"{academic}/"], active=True))
+        db.merge(m.ServiceClient(client_id="academic-video", name="Academic Video Creation", product_key="academics", secret_hash=hash_token("dev-video-secret"),
+                                 audiences=["video-engine"], scopes=["video:create", "video:read", "video:cancel"], active=True))
+        db.commit()
+        out = test_tenant.seed(db)
+    print("Local products registered. Aadi-Test:", out)
+    print("Sign in with any Aadi-Test person; the password is", test_tenant.PASSWORD)
+
+
+def seed_test(_):
+    """Adds or refreshes the Aadi-Test company and its 15 people (safe to repeat)."""
+    from . import test_tenant
+
+    with SessionLocal() as db:
+        ensure_signing_key(db)
+        out = test_tenant.seed(db)
+    print("Aadi-Test ready:", out, "| every person signs in with the password", test_tenant.PASSWORD)
+
+
+def reset_and_seed_test(a):
+    """ERASES every company, person, session and audit entry (platform administrators, products, clients and keys stay), then seeds Aadi-Test."""
+    from . import test_tenant
+
+    if not a.yes:
+        if input("This ERASES all companies and people in this database. Type YES to continue: ").strip() != "YES":
+            sys.exit("Cancelled. Nothing was changed.")
+    with SessionLocal() as db:
+        ensure_signing_key(db)
+        counts = test_tenant.wipe(db)
+        out = test_tenant.seed(db)
+    print("Erased:", counts)
+    print("Aadi-Test ready:", out)
+
+
 def bootstrap(_):
     """Runs at every start: registers Project Tracker when TRACKER_URL is set. Idempotent, safe in production."""
     url = os.environ.get("TRACKER_URL", "").rstrip("/")
     if url:
         _register_tracker(url)
         print("Project Tracker registered for", url)
+    # One-time maintenance, switched on by setting BOTH variables in the environment (then it runs once per id, however often the app restarts):
+    #   APP_MAINTENANCE=reset-and-seed-aadi-test   APP_MAINTENANCE_ID=<any new text>   APP_MAINTENANCE_CONFIRM=ERASE-ALL-DATA
+    if os.environ.get("APP_MAINTENANCE") == "reset-and-seed-aadi-test" and os.environ.get("APP_MAINTENANCE_CONFIRM") == "ERASE-ALL-DATA" and os.environ.get("APP_MAINTENANCE_ID"):
+        from . import test_tenant
+
+        with SessionLocal() as db:
+            ensure_signing_key(db)
+            out = test_tenant.maintenance_once(db, os.environ["APP_MAINTENANCE_ID"])
+        print("Maintenance:", "already done for this id" if out is None else out)
 
 
 def _seed_tracker_demo():
@@ -226,6 +287,14 @@ def main():
     x.add_argument("--name", required=True)
     x.add_argument("--description", default="")
     x.set_defaults(f=register_service)
+    x = sp.add_parser("dev-setup")
+    x.add_argument("--tracker-url", default="http://localhost:8000")
+    x.add_argument("--academic-url", default="http://localhost:5174")
+    x.set_defaults(f=dev_setup)
+    sp.add_parser("seed-test").set_defaults(f=seed_test)
+    x = sp.add_parser("reset-and-seed-test")
+    x.add_argument("--yes", action="store_true", help="do not ask (for the setup script and automation)")
+    x.set_defaults(f=reset_and_seed_test)
     x = sp.add_parser("set-product-secret")
     x.add_argument("--key", required=True)
     x.set_defaults(f=set_product_secret)
