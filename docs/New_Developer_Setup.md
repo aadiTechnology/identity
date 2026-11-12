@@ -1,6 +1,6 @@
 # New developer: first-time setup of the Aadi products
 
-You need **Python 3.12+**, **Node.js 20+** and **Docker Desktop** (running). Then, from each project folder, double-click or run `setup.bat` once. It creates the Python environment, starts PostgreSQL in Docker, creates the tables and loads the **Aadi-Test** company. Run it again any time; it is safe to repeat. `run.bat` starts the project.
+You need **Python 3.12+**, **Node.js 20+** and **Docker Desktop** (running). Then, from each project folder, double-click or run `setup.bat` once. It creates the Python environment, starts PostgreSQL in Docker, creates the tables and **runs the seed**, which loads the **Aadi-Test** company (see "Seed data" below to run or reset it by hand). Run it again any time; it is safe to repeat. `run.bat` starts the project.
 
 | Order | Folder | Setup | Start | Opens at |
 |---|---|---|---|---|
@@ -35,6 +35,25 @@ The people, departments, salaries, projects, tags, costs, revenue and allocation
 | pravin | Pravin Dixit | Sales Lead | Sales | Viewer | Marketing & Sales |
 
 Titles, roles and managers are not in the workbook; they were filled in so that every role of the products has a test person. Nobody in Aadi-Test is a platform administrator.
+
+## Seed data: where it is and how to run it
+
+`setup.bat` runs the seed for you (last step, "Loading the Aadi-Test company"). To run, repeat or reset it by hand, use the commands below from the project folder. Repeating is safe: the seed adds only what is missing. **`--reset` erases that project's whole local database first** (it asks you to type YES; add `--yes` to skip the question).
+
+| Project | Seed code | Run it (Windows) | Start over (erases the local data) |
+|---|---|---|---|
+| Identity (`identity`) | `app	est_tenant.py` (people, company, subscriptions); `dev-setup` in `app\cli.py` (registers the local products and sign-in clients) | `.venv\Scripts\python.exe -m app.cli dev-setup` | `.venv\Scripts\python.exe -m app.cli reset-and-seed-test` |
+| Project Tracker (`ProjectTrackingackend`) | `app\seed_aadi_test.py`; data in `app\seed_dataadi_matrix.json` (built from `docs\Aadi Technology Matrix_V4.xlsx`) | `set APP_ENV=demo` and `set DATABASE_URL=postgresql+psycopg://tracker:tracker_dev@localhost:15434/tracker_aadi_test`, then `.venv\Scripts\python.exe -m app.seed_aadi_test` | the same command with `--reset` |
+| Academic (`Media\Academicsackend`) | `app\seed_aadi_test.py`; sample lesson in `app\seed_dataefraction\` | `set DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:15441/academic_aadi_test`, `set AUTH_MODE=dev`, `set APP_ENV=development`, then `.venv\Scripts\python.exe -m app.seed_aadi_test` | the same command with `--reset` |
+
+What each seed loads:
+- **Identity:** the company Aadi-Test, its 15 people (shared password `AadiTest@2026`), the Project Tracker, Academic and Video Engine entries with their local sign-in clients. Nobody is a platform administrator. For a local platform administrator: `set IDENTITY_ADMIN_PASSWORD=<your choice>` then `.venv\Scripts\python.exe -m app.cli create-admin --email you@example.com --name "Your Name"`.
+- **Project Tracker:** the 15 people with department, title, role, manager and monthly salary; 3 departments with heads; 9 tags; 12 projects with planned cost and revenue; each person's monthly allocation to each project; the 160-hour month and Rs 250 hourly rate; and the organisation revenue target. All from the workbook.
+- **Academic:** the same 15 people with roles and departments (linked to their Aadi sign-in on first login), one class with a chapter, and one approved lesson, ready for "Make the video".
+
+Order matters only once: run `identity\setup.bat` first if you want real Aadi sign-in between products (it creates the products and sign-in clients the other two use). The three seeds use the same company id, `5ca1ab1e-aad1-4e57-8000-000000000001`, so a person who signs in through Identity lands in the right company in each product.
+
+**Changing the data:** edit `Aadi Technology Matrix_V4.xlsx`, run `python backend	oolsuild_matrix_seed.py` in `ProjectTracking` (needs `pip install openpyxl`), then run the Tracker seed with `--reset`. To change the people, edit the same list in all three seeds (`PEOPLE` in each file) and keep them identical.
 
 ## Signing in through Aadi Identity locally (optional, the real flow)
 
