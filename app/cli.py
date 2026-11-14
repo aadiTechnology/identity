@@ -262,6 +262,29 @@ def rotate_key(_):
     print("New signing key", k.kid, "(older keys stay published until their tokens expire)")
 
 
+def encrypt_secrets(_):
+    """Encrypt the webhook secrets and signing keys already stored in plaintext. Needs SECRETS_KEY. Safe to repeat: encrypted values are left alone."""
+    from sqlalchemy import text
+    from sqlalchemy.orm.attributes import flag_modified
+
+    from .config import get_settings
+    from .secrets_box import is_encrypted
+
+    if not get_settings().secrets_key:
+        sys.exit('SECRETS_KEY is not set: nothing to do. Generate one with: python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())"')
+    done = 0
+    with SessionLocal() as db:
+        targets = [(p, "webhook_secret", "SELECT webhook_secret FROM products WHERE key = :id", p.key) for p in db.execute(select(m.Product)).scalars()]
+        targets += [(k, "private_pem", "SELECT private_pem FROM signing_keys WHERE kid = :id", k.kid) for k in db.execute(select(m.SigningKey)).scalars()]
+        for row, col, sql, ident in targets:
+            stored = db.execute(text(sql), {"id": ident}).scalar()  # the ORM hands back decrypted text, so read what is really stored
+            if stored and not is_encrypted(stored):
+                flag_modified(row, col)  # rewriting the same value makes the column type encrypt it
+                done += 1
+        db.commit()
+    print(f"Encrypted {done} stored secret(s).")
+
+
 def init_db(_):
     Base.metadata.create_all(engine)
     with SessionLocal() as db:
@@ -313,6 +336,8 @@ def main():
     x.set_defaults(f=import_tracker_cmd)
     x = sp.add_parser("rotate-key")
     x.set_defaults(f=rotate_key)
+    x = sp.add_parser("encrypt-secrets")
+    x.set_defaults(f=encrypt_secrets)
     x = sp.add_parser("bootstrap")
     x.set_defaults(f=bootstrap)
     x = sp.add_parser("seed-demo")

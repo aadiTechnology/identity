@@ -9,12 +9,13 @@ A product can only act for companies that have it (a live subscription), never m
 override a company administrator's suspension."""
 import secrets
 
+import jwt
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import events, mail, ratelimit, service
+from .. import events, mail, ratelimit, security, service
 from .. import models as m
 from ..config import get_settings
 from ..db import get_db
@@ -25,8 +26,37 @@ router = APIRouter()
 HOURLY_LIMIT = 300  # enrolments and removals per product per hour; a bulk import should be paced
 
 
-def product_of(authorization: str | None, db: Session) -> m.Product:
-    token = authorization[7:] if authorization and authorization.lower().startswith("bearer ") else ""
+def _bearer(authorization: str | None) -> str:
+    return authorization[7:] if authorization and authorization.lower().startswith("bearer ") else ""
+
+
+def token_principal(db: Session, token: str, scope: str, tenant_id: str | None) -> m.Product:
+    """A product's server calling with an Identity service token (audience identity). Checks signature, issuer, audience, expiry, the scope, that the
+    token is a service token, and, when the call names a company, that it is the company the token was issued for."""
+    try:
+        claims = security.verify(db, token, audience=service.IDENTITY_AUDIENCE)
+        if jwt.get_unverified_header(token).get("typ") != "at+jwt":
+            raise jwt.InvalidTokenError("not a service token")
+    except jwt.PyJWTError:
+        raise HTTPException(401, "Invalid or expired token") from None
+    if scope not in set(str(claims.get("scope", "")).split()):
+        raise HTTPException(403, f"The token does not allow {scope}")
+    p = db.get(m.Product, claims.get("caller_product") or "")
+    if not p or not p.active:
+        raise HTTPException(401, "Invalid product credentials")
+    if tenant_id is not None and claims.get("tenant_id") != tenant_id:
+        raise HTTPException(403, "The token was issued for a different company")
+    return p
+
+
+def product_of(authorization: str | None, db: Session, scope: str = "", tenant_id: str | None = None) -> m.Product:
+    """Who is calling. Two ways, both accepted for now: an Identity service token (preferred), or the product's shared secret (to be retired)."""
+    token = _bearer(authorization)
+    if token.count(".") == 2:  # a JWT: shared secrets never look like this
+        p = token_principal(db, token, scope, tenant_id)
+        if ratelimit.hit(f"enrol:{p.key}", HOURLY_LIMIT, 3600.0):
+            raise HTTPException(429, "Too many requests from this product. Try again later.")
+        return p
     for p in db.execute(select(m.Product).where(m.Product.active.is_(True))).scalars():
         if p.webhook_secret and token and secrets.compare_digest(token, p.webhook_secret):
             if ratelimit.hit(f"enrol:{p.key}", HOURLY_LIMIT, 3600.0):
@@ -54,9 +84,10 @@ class Enrol(BaseModel):
     actor: str = ""  # the product administrator who asked (email), for the audit log and the notice to the company
 
 
+@router.post("/api/v1/products/enrol")
 @router.post("/api/products/enrol")
 def enrol(b: Enrol, authorization: str | None = Header(default=None), db: Session = Depends(get_db)):
-    p = product_of(authorization, db)
+    p = product_of(authorization, db, "identity:enrol", b.tenant_id)
     t, sub = _tenant_and_sub(db, b.tenant_id, p)
     email = b.email.lower()
     user = db.execute(select(m.User).where(m.User.email == email)).scalar_one_or_none()
@@ -116,9 +147,10 @@ class Removal(BaseModel):
     actor: str = ""
 
 
+@router.post("/api/v1/products/remove")
 @router.post("/api/products/remove")
 def remove(b: Removal, authorization: str | None = Header(default=None), db: Session = Depends(get_db)):
-    p = product_of(authorization, db)
+    p = product_of(authorization, db, "identity:remove", b.tenant_id)
     t = db.get(m.Tenant, b.tenant_id)
     if not t:
         raise HTTPException(404, "Unknown company")
@@ -144,8 +176,9 @@ def remove(b: Removal, authorization: str | None = Header(default=None), db: Ses
     return {"registered_products": left, "membership_ended": ended}
 
 
+@router.get("/api/v1/products/seats")
 @router.get("/api/products/seats")
 def seats(tenant_id: str, authorization: str | None = Header(default=None), db: Session = Depends(get_db)):
-    p = product_of(authorization, db)
+    p = product_of(authorization, db, "identity:seats", tenant_id)
     t, sub = _tenant_and_sub(db, tenant_id, p)
     return {"product": p.key, "seats": sub.seats, "used": service.seats_used(db, t.id, p.key)}

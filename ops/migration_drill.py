@@ -40,11 +40,11 @@ eng = sa.create_engine(url)
 with eng.begin() as c:
     c.execute(sa.text("drop table outbox"))
     c.execute(sa.text("alter table products drop column webhook_url, drop column webhook_secret"))
-    c.execute(sa.text("insert into products (key, name, description, initiate_url, active) values ('tracker','Project Tracker','','https://t/x',true)"))
+    c.execute(sa.text("insert into products (key, name, description, initiate_url, active, kind) values ('tracker','Project Tracker','','https://t/x',true,'product')"))
     c.execute(sa.text("insert into tenants (id, name, slug, status, created_at) values ('t1','Acme','acme','active', now())"))
 run(url, "upgrade", "head")
 with eng.begin() as c:
-    assert c.execute(sa.text("select count(*) from products")).scalar() == 1
+    assert c.execute(sa.text("select count(*) from products where key = 'tracker'")).scalar() == 1  # (0004 also seeds the video-engine service)
     assert c.execute(sa.text("select count(*) from tenants")).scalar() == 1
     cols = {r[0] for r in c.execute(sa.text("select column_name from information_schema.columns where table_name='products'"))}
     assert {"webhook_url", "webhook_secret"} <= cols
@@ -55,3 +55,24 @@ print("2. upgrade from the previous revision keeps data and adds the new parts: 
 run(url, "downgrade", "0001")
 run(url, "upgrade", "head")
 print("3. downgrade then upgrade: ok")
+
+# 4. a production-like database: revision 0004 with the old VARCHAR secret columns and real secret data (revision 0005, secrets at rest)
+url = fresh("drill_prod")
+run(url, "upgrade", "0004")
+eng = sa.create_engine(url)
+with eng.begin() as c:
+    c.execute(sa.text("alter table products alter column webhook_secret type varchar(100)"))
+    c.execute(sa.text("alter table signing_keys alter column private_pem type varchar(4000)"))
+    c.execute(sa.text("insert into products (key, name, description, initiate_url, active, webhook_url, webhook_secret, kind) values "
+                      "('tracker','Project Tracker','','https://t/x',true,'https://t/hook','plain-secret-123','product')"))
+    c.execute(sa.text("insert into signing_keys (kid, private_pem, active, published, created_at) values ('k1','-----BEGIN PRIVATE KEY-----x',true,true,now())"))
+run(url, "upgrade", "head")
+with eng.begin() as c:
+    types = {r[0]: r[1] for r in c.execute(sa.text("select column_name, data_type from information_schema.columns where (table_name='products' and column_name='webhook_secret') or (table_name='signing_keys' and column_name='private_pem')"))}
+    assert types == {"webhook_secret": "text", "private_pem": "text"}, types
+    assert c.execute(sa.text("select webhook_secret from products where key='tracker'")).scalar() == "plain-secret-123"
+    assert c.execute(sa.text("select private_pem from signing_keys where kid='k1'")).scalar().startswith("-----BEGIN")
+print("4. production-like database (0004, varchar secrets, real data) upgrades to text columns without changing any value: ok")
+run(url, "downgrade", "0004")
+run(url, "upgrade", "head")
+print("5. 0005 down and up again on that database: ok")

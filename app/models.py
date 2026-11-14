@@ -6,6 +6,7 @@ from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Uni
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
+from .secrets_box import EncryptedText
 
 
 def new_id() -> str:
@@ -69,7 +70,7 @@ class Product(Base):
     initiate_url: Mapped[str] = mapped_column(String(400), default="")  # product URL that starts sign-in
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     webhook_url: Mapped[str] = mapped_column(String(400), default="")  # where change events are delivered (empty = none)
-    webhook_secret: Mapped[str] = mapped_column(String(100), default="")  # signs events and authorises the product's snapshot reads
+    webhook_secret: Mapped[str] = mapped_column(EncryptedText, default="")  # signs events and authorises the product's snapshot reads
     kind: Mapped[str] = mapped_column(String(10), default="product")  # product (people sign in) | service (called by products, e.g. video-engine)
 
 
@@ -164,7 +165,7 @@ class AuthToken(Base):
 class SigningKey(Base):
     __tablename__ = "signing_keys"
     kid: Mapped[str] = mapped_column(String(40), primary_key=True)
-    private_pem: Mapped[str] = mapped_column(String(4000))
+    private_pem: Mapped[str] = mapped_column(EncryptedText)
     active: Mapped[bool] = mapped_column(Boolean, default=True)  # signs new tokens
     published: Mapped[bool] = mapped_column(Boolean, default=True)  # appears in JWKS (old keys stay until tokens expire)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

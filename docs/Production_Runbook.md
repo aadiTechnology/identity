@@ -125,3 +125,50 @@ To restore production: take the newest `a-*.gz` from the server, `gunzip -c a-..
 **Standalone PostgreSQL for new products.** Coolify resource `aadi-platform-postgres` (postgres:17-alpine, internal only, Coolify native daily backup, 14 kept). Rule: one database and one login per product; never put a product's tables in the `postgres` database. Create the product's login and database with `psql` from the Coolify terminal.
 
 **Staging gate (deviation D-6).** `powershell -File ops\staging_gate.ps1 -LogDir <folder> > out.txt 2>&1` starts Identity, Tracker, Academics and the Video Engine locally with Aadi-Test data and smoke-checks all of them; exit code 0 means PASS. Run it before every deploy. A Coolify staging environment with `staging.*` addresses needs DNS records; until then this is the pre-production gate.
+
+## 10. Branches, CI and deploys (sprint P2-S2, 2026-11-14)
+
+**A push to a deploy branch IS a production deploy.** Coolify deploys by webhook on every push to the branch it watches, with no approval step. The CI-only pushes of 2026-11-14 redeployed Identity, Tracker, Academics and the engine; Academics returned 503/connection errors for about two minutes while its container swapped. Run `ops/staging_gate.ps1` and the full test suite BEFORE pushing, and push in quiet hours for apps others are using.
+
+| Application | Repository | Deploys from | Public address | CI |
+|---|---|---|---|---|
+| Identity (+ demo) | aadiTechnology/identity | main | id.aadiprojecttracker.aaditechnology.com | .github/workflows/ci.yml |
+| Project Tracker | aadiTechnology/aadiprojecttracker | main (was identity-export; same commit 085bdb6 on 2026-11-14) | aadiprojecttracker.aaditechnology.com | yes |
+| Academics | aadiTechnology/acedemicvideocreation | main | academics.aaditechnology.com | yes |
+| Video Engine | aadiTechnology/ScriptToVideo | main | none (internal) | yes (service tests) |
+| Project CRM | Codewithash27/Project-CRM (PERSONAL account) | main | crm.aaditechnology.com | none yet |
+| DMS | aadiTechnology/DMS | dms-mvp-build | dms.aaditechnology.com | yes (existing) |
+
+**Owner actions that cannot be done through the tools available to this assistant**
+1. Transfer `Codewithash27/Project-CRM` into the `aadiTechnology` organisation (GitHub: Settings, Danger zone, Transfer). Then update the repository in Coolify (aadi-crm) and add the CI workflow.
+2. Turn on branch protection for `main` in each repository (require the `test` job to pass) once the first CI runs are confirmed green.
+3. Confirm GitHub Actions is enabled for the organisation and the first runs are green (not verifiable from the assistant: no GitHub CLI or token). Failures to expect and why: Tracker deselects one date-dependent test; the engine runs the service tests only.
+4. Merge DMS `dms-mvp-build` into `main` when ready (not done: it was not part of the approved sprint scope and DMS is live from that branch).
+
+**Known test-suite state (2026-11-14, local)**: Identity 89 pass; Tracker 150 pass, 1 pre-existing failure (`test_timesheet_submit_approve_reject`, depends on today's date versus demo data); Academics 228 pass; Video Engine 534 pass, 1 known unrelated failure (`test_project_slides_csv_is_utf8_csv`), and one engine isolation test failed once and passed on two re-runs (possible timing flake, not reproduced); aadi-org-kit 39 pass. One Identity test fails only on a developer machine whose `.env` sets `TEST_LOGINS_ENABLED=true`.
+
+**Dependency scan (pip-audit, 2026-11-14)**: Identity clean. Academics had PyJWT 2.10.1 with 22 advisories: fixed (2.15.1, 228 tests pass). Tracker: python-jose 3.5.0, one advisory (PYSEC-2026-4298) with NO fixed version published: keep watching, consider replacing python-jose with PyJWT (Identity and the engine already use it). Video Engine: Pillow 12.3.0, 42 advisories fixed only in 13.0.0 (a major version): needs its own sprint with the golden-frame render tests before upgrading.
+
+## 11. Service tokens for Identity's own API, secrets at rest (sprint P2-S3, 2026-11-14)
+
+**What changed (all additive; old behaviour is the default).**
+- New `/api/v1/...` paths for enrol, remove, seats, snapshot and me/products. The old `/api/...` paths still answer identically (contract in `contracts/identity-v1-paths.json`, test `tests/test_v1_contract.py`; published at `/api/v1/openapi.json`).
+- A product's server can use an Identity **service token** instead of the shared secret: audience `identity`, scopes `identity:enrol`, `identity:remove`, `identity:seats`, `identity:snapshot`; 10 minutes; limited to one company (the snapshot scope is company-free and limited to the token's own product). Both ways are accepted until the secrets are retired.
+- `SECRETS_KEY` (optional): encrypts webhook secrets and token signing keys in the database. Migration 0005 widens the two columns to TEXT (drilled on PostgreSQL, including a 0004 database with real values).
+- Every response carries `X-Correlation-Id` (accepted if sent, else generated).
+
+**To switch a product to service tokens (owner/platform-admin steps; I could not do these, they need an admin sign-in).**
+1. `/admin` > Service clients > new: client id `<product>-identity`, calling product `<product>`, service `Aadi Identity`, scopes enrol + remove (+ seats/snapshot if used). Copy the secret shown once.
+2. In Coolify, for that product add `IDENTITY_SERVICE_CLIENT_ID` and `IDENTITY_SERVICE_CLIENT_SECRET` (Tracker and Academics already pass them through) and redeploy. If Identity cannot issue a token the product falls back to its old secret and logs a warning, so a typo does not stop people being added.
+3. After a release with no fallback warnings, remove `IDENTITY_PRODUCT_SECRET` / the shared secret path (a later sprint). NOTE: Tracker's nightly reconcile still uses the old secret; moving it to the snapshot token is a follow-up.
+
+**To turn on encryption at rest (not done in production: key custody is the owner's decision, deviation D-7).**
+1. Generate a key: `python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())"`. Store it in a password manager AND as `SECRETS_KEY` in Coolify. If the key is lost the encrypted values cannot be read: webhook secrets must be set again (`set-product-secret`) and the signing key rotated; people would have to sign in again.
+2. Redeploy Identity, then run once in the Identity container (for example as a one-off Coolify scheduled task): `python -m app.cli encrypt-secrets`. It is safe to repeat and reports how many values it converted.
+3. Rollback: unset nothing; to go back, decrypt first (not provided on purpose) or restore the database backup from section 9.
+
+**Rollback of this release.** Redeploy the previous commit. Migration 0005 needs no downgrade for that: TEXT columns are compatible with the old code.
+
+**Test state for this release (local):** Identity 117 pass on SQLite and 116 pass on PostgreSQL (one PostgreSQL-only failure, `test_maintenance_runs_once_per_id`, fails identically on the previous commit); Tracker 158 pass + 1 pre-existing failure; Academics 236 pass; migration drill passes (5 scenarios); end-to-end transcript of a real Tracker client against a real Identity passes 9 of 9 steps.
+
+**Found on the way (not changed).** Academics' `docker-compose.coolify.yml` does not pass `IDENTITY_PRODUCT_SECRET` to the container, so enrolling people from Academics into Identity may be switched off in production even if the variable is set in Coolify. Check, and add the line if it was meant to be on.

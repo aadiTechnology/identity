@@ -189,7 +189,8 @@ def _client_dict(c: m.ServiceClient) -> dict:
 @router.get("/admin/api/service-clients")
 def list_service_clients(_: m.User = Depends(admin_user), db: Session = Depends(get_db)):
     return {"clients": [_client_dict(c) for c in db.execute(select(m.ServiceClient).order_by(m.ServiceClient.client_id)).scalars()],
-            "services": [{"key": p.key, "name": p.name} for p in db.execute(select(m.Product).where(m.Product.kind == "service")).scalars()]}
+            "services": [{"key": service.IDENTITY_AUDIENCE, "name": "Aadi Identity (enrol, remove, seats, snapshot)"}]
+                        + [{"key": p.key, "name": p.name} for p in db.execute(select(m.Product).where(m.Product.kind == "service")).scalars()]}
 
 
 class NewServiceClient(BaseModel):
@@ -209,8 +210,10 @@ def create_service_client(b: NewServiceClient, actor: m.User = Depends(admin_use
         raise HTTPException(422, "Unknown calling product")
     for a in b.audiences:
         p = db.get(m.Product, a)
-        if not p or p.kind != "service":
+        if a != service.IDENTITY_AUDIENCE and (not p or p.kind != "service"):
             raise HTTPException(422, f"{a} is not a registered service")
+    if service.IDENTITY_AUDIENCE in b.audiences and not {x for x in b.scopes if x.startswith("identity:")} <= service.IDENTITY_SCOPES:
+        raise HTTPException(422, "Unknown Identity scope")
     if not b.audiences or not b.scopes:
         raise HTTPException(422, "Choose at least one service and one scope")
     secret = new_token()[0]

@@ -1,3 +1,4 @@
+import uuid
 from contextlib import asynccontextmanager
 
 from pathlib import Path
@@ -33,7 +34,18 @@ async def lifespan(app: FastAPI):
     events.stop_worker()
 
 
-app = FastAPI(title="Aadi Identity", docs_url=None if get_settings().is_prod else "/docs", redoc_url=None, lifespan=lifespan)
+app = FastAPI(title="Aadi Identity", version="1.0", docs_url=None if get_settings().is_prod else "/docs", redoc_url=None,
+              openapi_url="/api/v1/openapi.json", lifespan=lifespan)  # the published contract (see tests/test_v1_contract.py)
+
+
+@app.middleware("http")
+async def correlation_id(request, call_next):
+    """Accept X-Correlation-Id (or make one), return it, so one action can be followed across products."""
+    cid = request.headers.get("x-correlation-id", "")[:64] or uuid.uuid4().hex
+    request.state.correlation_id = cid
+    resp = await call_next(request)
+    resp.headers["X-Correlation-Id"] = cid
+    return resp
 
 
 @app.middleware("http")

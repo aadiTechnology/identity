@@ -135,6 +135,10 @@ def visible_pairs(db: Session, user: m.User) -> list[Pair]:
 
 
 # ---- service tokens (client_credentials) ----
+IDENTITY_AUDIENCE = "identity"  # built-in: a product's server calling Identity's own API
+IDENTITY_SCOPES = {"identity:enrol", "identity:remove", "identity:seats", "identity:snapshot"}
+TENANT_FREE_SCOPES = {"identity:snapshot"}  # a token carrying only these needs no company (the snapshot covers all of the product's companies)
+
 def service_entitled(db: Session, tenant_id: str, product_key: str) -> bool:
     """Does the company have a live subscription to this product or service?"""
     s = db.execute(select(m.Subscription).where(m.Subscription.tenant_id == tenant_id, m.Subscription.product_key == product_key)).scalar_one_or_none()

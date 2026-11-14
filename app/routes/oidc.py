@@ -123,6 +123,34 @@ def _service_client(db, client_id: str, client_secret: str, authorization: str |
     return c
 
 
+def _identity_token(db: Session, c: m.ServiceClient, scope: str, tenant_id: str):
+    """A product's server asks for a token to call Identity's own API (enrol, remove, seats, snapshot). Replaces the shared product secret.
+    Tokens carry the company when one is given, and the API then refuses any other company. Only the snapshot scope may be company-free."""
+    wanted = scope.split()
+    if service.IDENTITY_AUDIENCE not in (c.audiences or []):
+        return _oauth_error("invalid_target", "This client may not ask for a token for that service")
+    if not wanted or not set(wanted) <= set(c.scopes or []) or not set(wanted) <= service.IDENTITY_SCOPES:
+        return _oauth_error("invalid_scope", "Scope not allowed for this client")
+    claims = {"sub": c.client_id, "client_id": c.client_id, "aud": service.IDENTITY_AUDIENCE, "scope": " ".join(wanted),
+              "caller_product": c.product_key, "jti": m.new_id()}
+    t = None
+    if tenant_id or not set(wanted) <= service.TENANT_FREE_SCOPES:
+        t = db.get(m.Tenant, tenant_id) if tenant_id else None
+        if not t or t.status not in ("active", "trial"):
+            return _oauth_error("invalid_request", "Unknown or inactive company (tenant_id)")
+        if not service.service_entitled(db, t.id, c.product_key):  # the calling product must be live for that company
+            service.audit(db, "service_token.denied", None, t.id, client=c.client_id, reason="caller_not_subscribed", audience=service.IDENTITY_AUDIENCE)
+            db.commit()
+            return _oauth_error("access_denied", "The company has no active subscription for the calling product")
+        claims["tenant_id"] = t.id
+    minutes = get_settings().service_token_minutes
+    tok = security.sign(db, claims, minutes, typ="at+jwt")
+    service.audit(db, "service_token.issued", None, t.id if t else None, client=c.client_id, audience=service.IDENTITY_AUDIENCE, scope=" ".join(wanted))
+    db.commit()
+    return JSONResponse({"token_type": "Bearer", "access_token": tok, "expires_in": minutes * 60, "scope": " ".join(wanted)},
+                        headers={"Cache-Control": "no-store", "Pragma": "no-cache"})
+
+
 def _client_credentials(db: Session, ip: str, client_id: str, client_secret: str, authorization: str | None, audience: str, scope: str, tenant_id: str):
     """A product's server asks for a token to call a shared service for ONE company. The token carries that company, so the service never has to trust a header."""
     c = _service_client(db, client_id, client_secret, authorization)
@@ -130,6 +158,8 @@ def _client_credentials(db: Session, ip: str, client_id: str, client_secret: str
         if ratelimit.hit(f"token-bad-client:{ip}", 20):
             return _oauth_error("slow_down", "Too many failed attempts", 429)
         return _oauth_error("invalid_client", status=401)
+    if audience == service.IDENTITY_AUDIENCE:
+        return _identity_token(db, c, scope, tenant_id)
     svc = db.get(m.Product, audience)
     if not audience or not svc or svc.kind != "service" or not svc.active or audience not in (c.audiences or []):
         return _oauth_error("invalid_target", "This client may not ask for a token for that service")
@@ -251,6 +281,7 @@ def userinfo(authorization: str | None = Header(default=None), db: Session = Dep
     return {"sub": u.id, "email": u.email, "name": u.name, "tid": c["tid"], "tenant_slug": c.get("tenant_slug"), "product": c.get("product")}
 
 
+@router.get("/api/v1/me/products")
 @router.get("/api/me/products")
 def my_products(request: Request, authorization: str | None = Header(default=None), db: Session = Depends(get_db)):
     """Feeds the product-header switcher. Called by a product's backend with the user's access token (or by the browser on this domain)."""

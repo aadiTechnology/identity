@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://identity:identity@localhost:15440/identity"
     # Optional PEM private key. When empty, a key is generated once and stored in the database (rotatable).
     signing_key_pem: str = ""
+    # Optional Fernet key: when set, webhook secrets and signing keys are encrypted in the database (see app/secrets_box.py).
+    secrets_key: str = ""
     cookie_secure: bool = True
     session_hours: int = 12
     access_token_minutes: int = 15
@@ -49,6 +51,12 @@ class Settings(BaseSettings):
             out.append("COOKIE_SECURE must be true")
         if "change-me" in self.database_url or "identity:identity@" in self.database_url or self.database_url.startswith("sqlite"):
             out.append("DATABASE_URL still has the development default")
+        if self.secrets_key:
+            try:
+                from cryptography.fernet import Fernet
+                Fernet(self.secrets_key.encode())
+            except Exception:  # noqa: BLE001
+                out.append("SECRETS_KEY is not a valid Fernet key")
         if self.email_backend == "file":
             out.append("EMAIL_BACKEND is file: invitations and reset links would not be sent")
         return out

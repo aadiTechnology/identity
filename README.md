@@ -23,7 +23,11 @@ Extracted from Project Tracker (sprint plan: `ProjectTracking/docs/Identity_Plat
 | `GET/POST /forgot`, `/reset` | Password reset and first-time password (invitations) |
 | `GET /authorize`, `POST /token`, `GET /userinfo` | OIDC |
 | `GET /.well-known/openid-configuration`, `/.well-known/jwks.json` | Discovery and signing keys |
-| `GET /api/me/products` | Feeds the product-header switcher (Bearer access token or session) |
+| `GET /api/v1/me/products` (alias `/api/me/products`) | Feeds the product-header switcher (Bearer access token or session) |
+| `POST /api/v1/products/enrol`, `/remove`, `GET /seats` (aliases under `/api/products/`) | A product enrols or removes its people. Bearer: an Identity **service token** (audience `identity`, scope `identity:enrol` / `identity:remove` / `identity:seats`, same company) or, for now, the product's shared secret |
+| `GET /api/v1/sync/snapshot?product=` (alias `/api/sync/snapshot`) | Who may use a product, for its reconcile. Bearer: service token with scope `identity:snapshot` (company-free) or the shared secret |
+| `POST /token` with `grant_type=client_credentials`, `audience=identity` | A product's server gets a 10 minute service token for Identity's own API (create the service client in `/admin`) |
+| `GET /api/v1/openapi.json` | The published contract (`contracts/identity-v1-paths.json` lists what may never be removed; checked by a test) |
 | `GET /logout?client_id=&post_logout_redirect_uri=` | RP-initiated sign-out |
 | `GET /admin`, `/admin/api/*` | Platform administration |
 | `GET /health` | Health check |

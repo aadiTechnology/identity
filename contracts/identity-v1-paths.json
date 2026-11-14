@@ -1,0 +1,25 @@
+{
+  "_comment": "The published contract of Aadi Identity: every method and path below must stay available. Add freely; removing one is a breaking change (new major version, 6 months notice). Checked by tests/test_v1_contract.py.",
+  "version": "1.0",
+  "paths": [
+    ["POST", "/token"],
+    ["GET", "/authorize"],
+    ["GET", "/userinfo"],
+    ["GET", "/.well-known/openid-configuration"],
+    ["GET", "/.well-known/jwks.json"],
+    ["GET", "/logout"],
+    ["GET", "/api/v1/me/products"],
+    ["POST", "/api/v1/products/enrol"],
+    ["POST", "/api/v1/products/remove"],
+    ["GET", "/api/v1/products/seats"],
+    ["GET", "/api/v1/sync/snapshot"],
+    ["GET", "/api/me/products"],
+    ["POST", "/api/products/enrol"],
+    ["POST", "/api/products/remove"],
+    ["GET", "/api/products/seats"],
+    ["GET", "/api/sync/snapshot"],
+    ["GET", "/health"]
+  ],
+  "token_audiences": ["identity", "video-engine"],
+  "identity_scopes": ["identity:enrol", "identity:remove", "identity:seats", "identity:snapshot"]
+}
