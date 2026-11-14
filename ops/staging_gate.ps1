@@ -40,7 +40,9 @@ $env:PYTHONPATH = $idr
 & $py -c "from app.db import SessionLocal; from app import models as m; db=SessionLocal(); db.query(m.Subscription).filter_by(tenant_id='5ca1ab1e-aad1-4e57-8000-000000000001', product_key='video-engine').delete(); db.commit()"
 Remove-Item Env:PYTHONPATH
 Pop-Location
+$env:WEBHOOKS_ENABLED = "true"  # the gate must exercise event delivery too (a developer's .env may switch the worker off)
 Start-Process -FilePath $py -ArgumentList "-m", "uvicorn", "app.main:app", "--port", "8010" -WorkingDirectory $idr -WindowStyle Hidden -RedirectStandardOutput "$sp\identity.log" -RedirectStandardError "$sp\identity.err"
+Remove-Item Env:WEBHOOKS_ENABLED -ErrorAction SilentlyContinue
 
 # ---- Project Tracker (8000): Aadi-Test from the workbook, Aadi sign-in ----
 $trk = "$root\ProjectTracking\backend"
