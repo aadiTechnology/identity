@@ -74,6 +74,35 @@ class Product(Base):
     kind: Mapped[str] = mapped_column(String(10), default="product")  # product (people sign in) | service (called by products, e.g. video-engine)
 
 
+class Plan(Base):
+    """A package of a product that companies can be given: features (names the product checks) and limits (numbers the product enforces)."""
+    __tablename__ = "plans"
+    key: Mapped[str] = mapped_column(String(40), primary_key=True)  # e.g. crm-basic
+    product_key: Mapped[str] = mapped_column(ForeignKey("products.key"), index=True)
+    name: Mapped[str] = mapped_column(String(80))
+    description: Mapped[str] = mapped_column(String(200), default="")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    features: Mapped[list["PlanFeature"]] = relationship(cascade="all, delete-orphan", lazy="selectin")
+    limits: Mapped[list["PlanLimit"]] = relationship(cascade="all, delete-orphan", lazy="selectin")
+
+
+class PlanFeature(Base):
+    __tablename__ = "plan_features"
+    __table_args__ = (UniqueConstraint("plan_key", "feature"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    plan_key: Mapped[str] = mapped_column(ForeignKey("plans.key"), index=True)
+    feature: Mapped[str] = mapped_column(String(60))
+
+
+class PlanLimit(Base):
+    __tablename__ = "plan_limits"
+    __table_args__ = (UniqueConstraint("plan_key", "limit_key"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    plan_key: Mapped[str] = mapped_column(ForeignKey("plans.key"), index=True)
+    limit_key: Mapped[str] = mapped_column(String(60))
+    value: Mapped[int | None] = mapped_column(Integer, nullable=True)  # None = unlimited
+
+
 class Subscription(Base):
     __tablename__ = "subscriptions"
     __table_args__ = (UniqueConstraint("tenant_id", "product_key"),)
@@ -83,6 +112,7 @@ class Subscription(Base):
     status: Mapped[str] = mapped_column(String(20), default="active")  # active | trial | suspended | cancelled
     seats: Mapped[int | None] = mapped_column(Integer, nullable=True)
     valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    plan_key: Mapped[str | None] = mapped_column(ForeignKey("plans.key"), nullable=True)  # none = no plan: the company has the product with no packaging limits
     tenant: Mapped[Tenant] = relationship(back_populates="subscriptions")
 
 

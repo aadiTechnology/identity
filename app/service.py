@@ -136,7 +136,7 @@ def visible_pairs(db: Session, user: m.User) -> list[Pair]:
 
 # ---- service tokens (client_credentials) ----
 IDENTITY_AUDIENCE = "identity"  # built-in: a product's server calling Identity's own API
-IDENTITY_SCOPES = {"identity:enrol", "identity:remove", "identity:seats", "identity:snapshot"}
+IDENTITY_SCOPES = {"identity:enrol", "identity:remove", "identity:seats", "identity:snapshot", "identity:entitlements"}
 TENANT_FREE_SCOPES = {"identity:snapshot"}  # a token carrying only these needs no company (the snapshot covers all of the product's companies)
 
 def service_entitled(db: Session, tenant_id: str, product_key: str) -> bool:
@@ -144,3 +144,25 @@ def service_entitled(db: Session, tenant_id: str, product_key: str) -> bool:
     s = db.execute(select(m.Subscription).where(m.Subscription.tenant_id == tenant_id, m.Subscription.product_key == product_key)).scalar_one_or_none()
     p = db.get(m.Product, product_key)
     return bool(s and p and p.active and subscription_live(s))
+
+
+# ---- entitlements (plans, features, limits) ----
+def plan_view(plan: m.Plan) -> dict:
+    return {"key": plan.key, "name": plan.name, "features": sorted(f.feature for f in plan.features), "limits": {l.limit_key: l.value for l in sorted(plan.limits, key=lambda x: x.limit_key)}}
+
+
+def entitlements(db: Session, tenant: m.Tenant, product_key: str) -> dict:
+    """What a company may use of one product: the answer products read (cached a few minutes) instead of keeping a plan of their own.
+    A subscription with no plan is entitled with no packaging limits. Anything not live answers entitled=false with no features and no limits."""
+    s = db.execute(select(m.Subscription).where(m.Subscription.tenant_id == tenant.id, m.Subscription.product_key == product_key)).scalar_one_or_none()
+    p = db.get(m.Product, product_key)
+    live = bool(s and p and p.active and tenant.status in ("active", "trial") and subscription_live(s))
+    out = {"tenant_id": tenant.id, "product": product_key, "entitled": live, "status": s.status if s else None,
+           "valid_until": m.aware(s.valid_until).isoformat() if s and s.valid_until else None, "seats": s.seats if s else None,
+           "seats_used": seats_used(db, tenant.id, product_key) if s else 0, "plan": None, "features": [], "limits": {}}
+    if live and s.plan_key:
+        plan = db.get(m.Plan, s.plan_key)
+        if plan and plan.active:
+            v = plan_view(plan)
+            out.update(plan={"key": v["key"], "name": v["name"]}, features=v["features"], limits=v["limits"])
+    return out

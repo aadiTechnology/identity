@@ -76,3 +76,31 @@ print("4. production-like database (0004, varchar secrets, real data) upgrades t
 run(url, "downgrade", "0004")
 run(url, "upgrade", "head")
 print("5. 0005 down and up again on that database: ok")
+
+# 6. entitlements (revision 0006): a production-like database without the plan tables, with real subscriptions, upgrades without touching them
+url = fresh("drill_ent")
+run(url, "upgrade", "0005")
+eng = sa.create_engine(url)
+with eng.begin() as c:  # emulate the schema before 0006 (revision 0001 builds from the current models, so remove what 0006 adds)
+    c.execute(sa.text("alter table subscriptions drop column plan_key"))
+    c.execute(sa.text("drop table plan_limits"))
+    c.execute(sa.text("drop table plan_features"))
+    c.execute(sa.text("drop table plans"))
+    c.execute(sa.text("insert into products (key, name, description, initiate_url, active, webhook_url, webhook_secret, kind) values ('crm','CRM','','https://c/x',true,'','','product')"))
+    c.execute(sa.text("insert into tenants (id, name, slug, status, created_at) values ('t1','Acme','acme','active', now())"))
+    c.execute(sa.text("insert into subscriptions (id, tenant_id, product_key, status) values ('s1','t1','crm','active')"))
+run(url, "upgrade", "head")
+with eng.begin() as c:
+    tables = {r[0] for r in c.execute(sa.text("select table_name from information_schema.tables where table_schema='public'"))}
+    assert {"plans", "plan_features", "plan_limits"} <= tables, tables
+    assert c.execute(sa.text("select plan_key from subscriptions where id='s1'")).scalar() is None
+    assert c.execute(sa.text("select status from subscriptions where id='s1'")).scalar() == "active"
+    c.execute(sa.text("insert into plans (key, product_key, name, description, active) values ('crm-basic','crm','CRM Basic','',true)"))
+    c.execute(sa.text("update subscriptions set plan_key='crm-basic' where id='s1'"))
+print("6. 0006 adds the plan tables and a nullable plan_key; existing subscriptions are untouched: ok")
+run(url, "downgrade", "0005")
+with eng.begin() as c:
+    assert c.execute(sa.text("select count(*) from subscriptions")).scalar() == 1  # the subscription survives the downgrade
+    assert "plan_key" not in {r[0] for r in c.execute(sa.text("select column_name from information_schema.columns where table_name='subscriptions'"))}
+run(url, "upgrade", "head")
+print("7. 0006 down (subscriptions kept) and up again: ok")

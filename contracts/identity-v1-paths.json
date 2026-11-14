@@ -13,6 +13,7 @@
     ["POST", "/api/v1/products/remove"],
     ["GET", "/api/v1/products/seats"],
     ["GET", "/api/v1/sync/snapshot"],
+    ["GET", "/api/v1/entitlements"],
     ["GET", "/api/me/products"],
     ["POST", "/api/products/enrol"],
     ["POST", "/api/products/remove"],
@@ -21,5 +22,5 @@
     ["GET", "/health"]
   ],
   "token_audiences": ["identity", "video-engine"],
-  "identity_scopes": ["identity:enrol", "identity:remove", "identity:seats", "identity:snapshot"]
+  "identity_scopes": ["identity:enrol", "identity:remove", "identity:seats", "identity:snapshot", "identity:entitlements"]
 }

@@ -172,3 +172,17 @@ To restore production: take the newest `a-*.gz` from the server, `gunzip -c a-..
 **Test state for this release (local):** Identity 117 pass on SQLite and 116 pass on PostgreSQL (one PostgreSQL-only failure, `test_maintenance_runs_once_per_id`, fails identically on the previous commit); Tracker 158 pass + 1 pre-existing failure; Academics 236 pass; migration drill passes (5 scenarios); end-to-end transcript of a real Tracker client against a real Identity passes 9 of 9 steps.
 
 **Found on the way (not changed).** Academics' `docker-compose.coolify.yml` does not pass `IDENTITY_PRODUCT_SECRET` to the container, so enrolling people from Academics into Identity may be switched off in production even if the variable is set in Coolify. Check, and add the line if it was meant to be on.
+
+## 12. Entitlements v1: plans, features, limits (sprint P2-S5, 2026-11-14)
+
+**Idea.** Identity says what a company may use; products read it instead of keeping a plan of their own. A plan belongs to one product and holds feature names (strings the product checks, for example `costing`) and limits (numbers the product enforces, for example `projects=50`; empty = unlimited). A subscription with NO plan behaves exactly as before. Nothing in Tracker or Academics reads plans yet (they only gained the reader), so no existing feature changes.
+
+**Admin.** `/admin` > Plans: create or change a plan; "Give a company a plan" assigns it. Both emit `subscription.changed` to the product (the event carries `plan`, `features`, `limits` only when a plan is assigned; plan-less events are unchanged).
+
+**Product side.** `GET /api/v1/entitlements?tenant_id=<company>` with a service token (scope `identity:entitlements`, add it to the product's service client) or, for now, the shared secret. The Tracker and Academics `IdentityClient.entitlements(tenant_id)` reader caches 5 minutes and serves the last known answer if Identity is down. Rule for products: treat `entitled:false` as no access to the product's paid parts, cache at most 5 minutes, never invent a plan locally.
+
+**Migration 0006** adds `plans`, `plan_features`, `plan_limits` and a nullable `subscriptions.plan_key`; drilled on PostgreSQL on a production-like database with real subscriptions (up, down keeping the subscriptions, up). Rollback of the release: redeploy the previous commit (the extra tables and column are ignored by it).
+
+**Tests (local):** Identity 134 pass on SQLite, 133 on PostgreSQL (+ the one PostgreSQL-only failure that also fails on the commit before this work); Tracker 162 + 1 pre-existing failure; Academics 240; migration drill 7 scenarios; end-to-end check of the real Tracker client reading a plan created in the console (8/8). A bug found by the tests and fixed before release: re-saving a plan inserted its features before deleting the old ones (unique-constraint error); plans are now updated in place.
+
+**Not done in this sprint:** wiring plan features into Tracker or Academics screens (would change product behaviour: later, per product, when a plan is actually sold); defining the real plans and prices (owner/business decision); a plan for the Video Engine service (its limits still live in its `tenant_limits` table).

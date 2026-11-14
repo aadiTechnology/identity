@@ -39,7 +39,7 @@ def admin_page(request: Request, db: Session = Depends(get_db)):
 
 def _tenant_dict(t: m.Tenant) -> dict:
     return {"id": t.id, "name": t.name, "slug": t.slug, "status": t.status, "members": len([x for x in t.members if x.status == "active"]),
-            "subscriptions": [{"product": s.product_key, "status": s.status, "valid_until": s.valid_until.isoformat() if s.valid_until else None} for s in t.subscriptions]}
+            "subscriptions": [{"product": s.product_key, "status": s.status, "valid_until": s.valid_until.isoformat() if s.valid_until else None, "plan": s.plan_key} for s in t.subscriptions]}
 
 
 @router.get("/admin/api/overview")
@@ -120,6 +120,94 @@ def set_subscription(tid: str, b: SubChange, actor: m.User = Depends(admin_user)
                 service.register(db, tid, mem.user_id, b.product, "admin", actor.email)
     events.emit(db, "subscription.changed", tenant=t, subscription=s, only_product=b.product)
     service.audit(db, "subscription.changed", actor.id, tid, product=b.product, status=b.status)
+    db.commit()
+    db.refresh(t)
+    return _tenant_dict(t)
+
+
+# ---- plans: packages of a product (features and limits) that companies can be given ----
+PLAN_KEY = re.compile(r"[a-z0-9][a-z0-9-]{2,38}")
+NAME_KEY = re.compile(r"[a-z][a-z0-9_.:-]{1,58}")
+
+
+class PlanIn(BaseModel):
+    key: str
+    product_key: str
+    name: str
+    description: str = ""
+    features: list[str] = []
+    limits: dict[str, int | None] = {}
+    active: bool = True
+
+
+def _plan_dict(p: m.Plan) -> dict:
+    return {**service.plan_view(p), "product": p.product_key, "description": p.description, "active": p.active}
+
+
+@router.get("/admin/api/plans")
+def list_plans(_: m.User = Depends(admin_user), db: Session = Depends(get_db)):
+    return {"plans": [_plan_dict(p) for p in db.execute(select(m.Plan).order_by(m.Plan.product_key, m.Plan.key)).scalars()]}
+
+
+@router.post("/admin/api/plans")
+def save_plan(b: PlanIn, actor: m.User = Depends(admin_user), db: Session = Depends(get_db)):
+    """Create or change a plan. Companies already on it get a subscription.changed event carrying the new features and limits."""
+    if not PLAN_KEY.fullmatch(b.key):
+        raise HTTPException(422, "Plan key: 3-39 lowercase letters, digits or dashes")
+    prod = db.get(m.Product, b.product_key)
+    if not prod or prod.kind != "product":
+        raise HTTPException(422, "Unknown product")
+    features = sorted(set(x.strip() for x in b.features if x.strip()))
+    if not b.name.strip() or any(not NAME_KEY.fullmatch(f) for f in features) or any(not NAME_KEY.fullmatch(k) for k in b.limits):
+        raise HTTPException(422, "Features and limit names: lowercase letters, digits and . _ : - (for example leads.import, storage_gb)")
+    if any(v is not None and v < 0 for v in b.limits.values()):
+        raise HTTPException(422, "A limit is a number from 0 up, or empty for unlimited")
+    p = db.get(m.Plan, b.key)
+    if p and p.product_key != b.product_key:
+        raise HTTPException(409, "That plan key already belongs to another product")
+    if not p:
+        p = m.Plan(key=b.key, product_key=b.product_key, name=b.name.strip())
+        db.add(p)
+    p.name, p.description, p.active = b.name.strip(), b.description.strip(), b.active
+    have = {f.feature: f for f in p.features}  # change in place: keep what is unchanged, drop what went, add what is new (a replace would insert before it deletes)
+    for name, row in have.items():
+        if name not in features:
+            p.features.remove(row)
+    p.features.extend(m.PlanFeature(plan_key=b.key, feature=f) for f in features if f not in have)
+    have_l = {l.limit_key: l for l in p.limits}
+    for name, row in have_l.items():
+        if name not in b.limits:
+            p.limits.remove(row)
+        else:
+            row.value = b.limits[name]
+    p.limits.extend(m.PlanLimit(plan_key=b.key, limit_key=k, value=v) for k, v in sorted(b.limits.items()) if k not in have_l)
+    db.flush()
+    for s in db.execute(select(m.Subscription).where(m.Subscription.plan_key == b.key)).scalars():  # tell the products of every company on this plan
+        events.emit(db, "subscription.changed", tenant=s.tenant, subscription=s, only_product=s.product_key)
+    service.audit(db, "plan.saved", actor.id, None, plan=b.key, product=b.product_key, features=features, limits=b.limits)
+    db.commit()
+    return _plan_dict(p)
+
+
+class PlanAssign(BaseModel):
+    product: str
+    plan: str | None = None  # none = back to no plan
+
+
+@router.post("/admin/api/tenants/{tid}/plan")
+def assign_plan(tid: str, b: PlanAssign, actor: m.User = Depends(admin_user), db: Session = Depends(get_db)):
+    t = db.get(m.Tenant, tid)
+    s = db.execute(select(m.Subscription).where(m.Subscription.tenant_id == tid, m.Subscription.product_key == b.product)).scalar_one_or_none() if t else None
+    if not t or not s:
+        raise HTTPException(404, "The company has no subscription to that product")
+    if b.plan is not None:
+        p = db.get(m.Plan, b.plan)
+        if not p or p.product_key != b.product or not p.active:
+            raise HTTPException(422, "Unknown or inactive plan for that product")
+    s.plan_key = b.plan
+    db.flush()
+    events.emit(db, "subscription.changed", tenant=t, subscription=s, only_product=b.product)
+    service.audit(db, "subscription.plan_changed", actor.id, tid, product=b.product, plan=b.plan)
     db.commit()
     db.refresh(t)
     return _tenant_dict(t)

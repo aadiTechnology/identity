@@ -53,6 +53,12 @@ def emit(db: Session, type: str, tenant: m.Tenant | None = None, user: m.User | 
     if subscription is not None:
         payload["subscription"] = {"product": subscription.product_key, "status": subscription.status,
                                    "valid_until": subscription.valid_until.isoformat() if subscription.valid_until else None}
+        if subscription.plan_key:  # only when a plan is assigned, so events for plan-less subscriptions are exactly what they always were
+            plan = db.get(m.Plan, subscription.plan_key)
+            if plan:
+                from . import service
+                v = service.plan_view(plan)
+                payload["subscription"].update(plan=v["key"], features=v["features"], limits=v["limits"])
     for p in products:
         if only_product and p.key != only_product:
             continue

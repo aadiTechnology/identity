@@ -27,6 +27,8 @@ Extracted from Project Tracker (sprint plan: `ProjectTracking/docs/Identity_Plat
 | `POST /api/v1/products/enrol`, `/remove`, `GET /seats` (aliases under `/api/products/`) | A product enrols or removes its people. Bearer: an Identity **service token** (audience `identity`, scope `identity:enrol` / `identity:remove` / `identity:seats`, same company) or, for now, the product's shared secret |
 | `GET /api/v1/sync/snapshot?product=` (alias `/api/sync/snapshot`) | Who may use a product, for its reconcile. Bearer: service token with scope `identity:snapshot` (company-free) or the shared secret |
 | `POST /token` with `grant_type=client_credentials`, `audience=identity` | A product's server gets a 10 minute service token for Identity's own API (create the service client in `/admin`) |
+| `GET /api/v1/entitlements?tenant_id=` | What the company may use of the CALLING product: `entitled`, plan, features, limits, seats. Bearer: service token scope `identity:entitlements` for that company, or the shared secret. A subscription with no plan is entitled with no packaging; anything not live answers `entitled:false` with nothing attached |
+| `GET/POST /admin/api/plans`, `POST /admin/api/tenants/{id}/plan` | Platform admin: define plans (features and limits per product) and give a company one. Companies on a changed plan get a `subscription.changed` event with the new features and limits |
 | `GET /api/v1/openapi.json` | The published contract (`contracts/identity-v1-paths.json` lists what may never be removed; checked by a test) |
 | `GET /logout?client_id=&post_logout_redirect_uri=` | RP-initiated sign-out |
 | `GET /admin`, `/admin/api/*` | Platform administration |

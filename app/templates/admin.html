@@ -35,6 +35,23 @@ form.new{display:grid;gap:6px;margin-top:10px}form.new button{width:auto}</style
 <button type="submit">Create client</button>
 </form>
 <div id="svc-secret" class="mini" role="status"></div>
+<h2>Plans</h2>
+<p class="mini">A plan is a package of one product: the features it includes and the limits that apply (leave a limit empty for unlimited). Products read the plan of each company from Identity, so a package can change without changing the product. A company with no plan keeps today's behaviour.</p>
+<div id="plans"></div>
+<form class="new" id="planform">
+<label for="pl-key">Plan key</label><input id="pl-key" type="text" placeholder="crm-basic" required>
+<label for="pl-name">Name</label><input id="pl-name" type="text" placeholder="CRM Basic" required>
+<label for="pl-prod">Product</label><select id="pl-prod"></select>
+<label for="pl-feat">Features (space separated)</label><input id="pl-feat" type="text" placeholder="leads.import reports.basic">
+<label for="pl-lim">Limits (name=number, space separated)</label><input id="pl-lim" type="text" placeholder="leads=500 users=5">
+<button type="submit">Save plan</button>
+</form>
+<form class="new" id="assignform">
+<label for="as-t">Give a company a plan</label><select id="as-t"></select>
+<select id="as-p"></select><select id="as-plan"></select>
+<button type="submit">Assign plan</button>
+</form>
+<div id="plan-msg" class="mini" role="status"></div>
 <h2>Health</h2><div id="health" class="mini">Loading…</div>
 <p><button type="button" id="rotate" class="chip" style="padding:3px 12px">Rotate signing key</button> <span class="mini" id="rotmsg"></span></p>
 <h2>Recent activity</h2><div id="audit" class="mini"></div>
@@ -42,4 +59,5 @@ form.new{display:grid;gap:6px;margin-top:10px}form.new button{width:auto}</style
 <div class="foot"><span class="muted">{{ user.email }}</span><a href="/">Back to my products</a></div>
 <script src="/static/admin.js" defer></script>
 <script src="/static/admin-services.js" defer></script>
+<script src="/static/admin-plans.js" defer></script>
 {% endblock %}
