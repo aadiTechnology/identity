@@ -136,11 +136,11 @@ To restore production: take the newest `a-*.gz` from the server, `gunzip -c a-..
 | Project Tracker | aadiTechnology/aadiprojecttracker | main (was identity-export; same commit 085bdb6 on 2026-11-14) | aadiprojecttracker.aaditechnology.com | yes |
 | Academics | aadiTechnology/acedemicvideocreation | main | academics.aaditechnology.com | yes |
 | Video Engine | aadiTechnology/ScriptToVideo | main | none (internal) | yes (service tests) |
-| Project CRM | Codewithash27/Project-CRM (PERSONAL account) | main | crm.aaditechnology.com | none yet |
+| Project CRM | aadiTechnology/Project-CRM (moved from the personal account by the owner, 2026-11-14) | main | crm.aaditechnology.com | yes (ab910d5; 67 tests on a throwaway PostgreSQL). Coolify did NOT auto-deploy after the CI push: check the webhook for this app |
 | DMS | aadiTechnology/DMS | dms-mvp-build | dms.aaditechnology.com | yes (existing) |
 
 **Owner actions that cannot be done through the tools available to this assistant**
-1. Transfer `Codewithash27/Project-CRM` into the `aadiTechnology` organisation (GitHub: Settings, Danger zone, Transfer). Then update the repository in Coolify (aadi-crm) and add the CI workflow.
+1. DONE 2026-11-14: `Project-CRM` is in the `aadiTechnology` organisation, Coolify points at it, CI added.
 2. Turn on branch protection for `main` in each repository (require the `test` job to pass) once the first CI runs are confirmed green.
 3. Confirm GitHub Actions is enabled for the organisation and the first runs are green (not verifiable from the assistant: no GitHub CLI or token). Failures to expect and why: Tracker deselects one date-dependent test; the engine runs the service tests only.
 4. Merge DMS `dms-mvp-build` into `main` when ready (not done: it was not part of the approved sprint scope and DMS is live from that branch).
