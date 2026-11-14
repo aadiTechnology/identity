@@ -102,3 +102,26 @@ A product's **server** gets a short-lived token to call a shared service for one
 - **Refused unless all hold:** client active and secret right; the service is registered (`kind=service`) and allowed for that client; scopes are a subset of the client's; the company exists and is active; **the company has a live subscription to the calling product and to the service** (stops a product asking for a company that does not use it). Refusals are audited (`service_token.denied`); issues too (`service_token.issued`).
 - **Set up:** the `video-engine` service exists after the migration. In `/admin`: turn the "Video Engine (service)" chip on for each company, then create a client under "Service clients" (the secret is shown once). Rotate a secret or disable a client there; the old secret stops working at once, tokens already issued live out their 10 minutes.
 - **CLI:** `python -m app.cli register-service --key <key> --name <name>` registers another service.
+
+## 9. Backups, monitoring and the staging gate (sprint P2-S1, 2026-11-14)
+
+**What is live on Coolify** (scheduled tasks, created through the Coolify API):
+
+| Application | Task | When (server time) | What it does |
+|---|---|---|---|
+| aadi-identity | `db-backup` | 03:00 daily | `pg_dumpall` of the whole PostgreSQL server in the Identity stack (databases Identity, Academics, Video Engine), gzip, keeps the newest 14, in `/var/lib/postgresql/data/_b` |
+| aadi-project-tracker, aadi-crm, d-m-s (DMS) | `db-backup` | 03:00 daily | same, for each product's own server |
+| all four | `db-backup-check` | 03:30 daily | exits with an error (task shows as failed in Coolify) when the newest backup is missing, under 10 KB or older than 25 hours |
+
+Each task was run once and its result checked on 2026-11-14 (a positive check passed and a negative control failed as expected).
+
+**Known limits (deviations D-1, D-2).** The dumps are on the same server and volume as the data. They protect against mistakes, bad migrations and a dropped database, NOT against loss of the server or volume. Copy them off the server (needs shell or S3 access, not available through the Coolify API) before relying on them for disaster recovery. The shared PostgreSQL still lives inside the Identity stack; moving Academics and the engine to the standalone server also needs shell access.
+
+**Restore.** `ops/restore_drill_all.sh <container> <superuser> [dump.gz]` restores a `pg_dumpall` dump into a scratch container and compares row counts of every table in every database. It refuses to pass on an empty dump, a missing container or zero tables. Last run: 67 tables matched (local engine databases).
+To restore production: take the newest `a-*.gz` from the server, `gunzip -c a-....gz | psql -U <superuser> postgres` into a NEW container first, check, then switch the application.
+
+**Uptime monitor.** `.github/workflows/uptime.yml` runs `ops/uptime_check.py` every 10 minutes on GitHub (off the Coolify server) for Identity (`/health/ready`), Tracker, Academics, CRM and DMS. A failing run emails the repository's watchers. Owner action: make sure the right people watch this repository and Actions is enabled.
+
+**Standalone PostgreSQL for new products.** Coolify resource `aadi-platform-postgres` (postgres:17-alpine, internal only, Coolify native daily backup, 14 kept). Rule: one database and one login per product; never put a product's tables in the `postgres` database. Create the product's login and database with `psql` from the Coolify terminal.
+
+**Staging gate (deviation D-6).** `powershell -File ops\staging_gate.ps1 -LogDir <folder> > out.txt 2>&1` starts Identity, Tracker, Academics and the Video Engine locally with Aadi-Test data and smoke-checks all of them; exit code 0 means PASS. Run it before every deploy. A Coolify staging environment with `staging.*` addresses needs DNS records; until then this is the pre-production gate.
