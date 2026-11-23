@@ -154,7 +154,7 @@ To restore production: take the newest `a-*.gz` from the server, `gunzip -c a-..
 **What changed (all additive; old behaviour is the default).**
 - New `/api/v1/...` paths for enrol, remove, seats, snapshot and me/products. The old `/api/...` paths still answer identically (contract in `contracts/identity-v1-paths.json`, test `tests/test_v1_contract.py`; published at `/api/v1/openapi.json`).
 - A product's server can use an Identity **service token** instead of the shared secret: audience `identity`, scopes `identity:enrol`, `identity:remove`, `identity:seats`, `identity:snapshot`; 10 minutes; limited to one company (the snapshot scope is company-free and limited to the token's own product). Both ways are accepted until the secrets are retired.
-- `SECRETS_KEY` (optional): encrypts webhook secrets and token signing keys in the database. Migration 0005 widens the two columns to TEXT (drilled on PostgreSQL, including a 0004 database with real values).
+- `SECRETS_KEY` (optional; ON in production since 2026-11-23, see below): encrypts webhook secrets and token signing keys in the database. Migration 0005 widens the two columns to TEXT (drilled on PostgreSQL, including a 0004 database with real values).
 - Every response carries `X-Correlation-Id` (accepted if sent, else generated).
 
 **To switch a product to service tokens (owner/platform-admin steps; I could not do these, they need an admin sign-in).**
@@ -162,7 +162,14 @@ To restore production: take the newest `a-*.gz` from the server, `gunzip -c a-..
 2. In Coolify, for that product add `IDENTITY_SERVICE_CLIENT_ID` and `IDENTITY_SERVICE_CLIENT_SECRET` (Tracker and Academics already pass them through) and redeploy. If Identity cannot issue a token the product falls back to its old secret and logs a warning, so a typo does not stop people being added.
 3. After a release with no fallback warnings, remove `IDENTITY_PRODUCT_SECRET` / the shared secret path (a later sprint). NOTE: Tracker's nightly reconcile still uses the old secret; moving it to the snapshot token is a follow-up.
 
-**To turn on encryption at rest (not done in production: key custody is the owner's decision, deviation D-7).**
+**Encryption at rest is ON in production (done 2026-11-23; closes deviation D-7).** The owner generated the key, stored it in the password manager and set `SECRETS_KEY` on `aadi-identity` in Coolify. `python -m app.cli encrypt-secrets` was then run once in the `app` container as a one-off Coolify scheduled task. Proof, in this order: a fresh `pg_dumpall` backup (`pre-encrypt2-*.gz` in the database volume, not covered by the 14-file cleanup, remove when no longer needed); a check task that FAILED while plaintext secrets existed; `encrypt-secrets` succeeded; the same check PASSED; a second run changed nothing; Identity was restarted so it had to decrypt the signing key from the database (not from memory); the published signing key ids were identical before and after (`326b0d155d312408`, `af95ea54ee51e604`), so no token was invalidated; and the owner signed in on production afterwards.
+Lessons worth keeping:
+- **Coolify creates EMPTY variables automatically** for every `${NAME}` it finds in a compose file. A variable that exists by name may have no value (this happened to `SECRETS_KEY`, and probably to the Tracker and Academics service-client variables). Always confirm inside the container: a one-off task `[ -n "$NAME" ]` succeeds only if it has a value.
+- A Coolify scheduled-task command is limited to about 250 characters and its output cannot be read through the API; use yes/no exit-code checks (a positive and a negative control), as above.
+- To check encryption any time: a task that runs `python -c "from app.db import engine as e;exit(e.connect().exec_driver_sql(\"select (select count(*) from products where webhook_secret>'' and webhook_secret!~'^enc:')+(select count(*) from signing_keys where private_pem!~'^enc:')\").scalar())"` in the `app` container; success means nothing is stored in plaintext.
+- NEVER change or delete `SECRETS_KEY` now: without it the stored secrets cannot be read.
+
+How it works (for reference, and for any other environment):
 1. Generate a key: `python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())"`. Store it in a password manager AND as `SECRETS_KEY` in Coolify. If the key is lost the encrypted values cannot be read: webhook secrets must be set again (`set-product-secret`) and the signing key rotated; people would have to sign in again.
 2. Redeploy Identity, then run once in the Identity container (for example as a one-off Coolify scheduled task): `python -m app.cli encrypt-secrets`. It is safe to repeat and reports how many values it converted.
 3. Rollback: unset nothing; to go back, decrypt first (not provided on purpose) or restore the database backup from section 9.
